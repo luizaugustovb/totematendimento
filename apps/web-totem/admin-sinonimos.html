@@ -610,17 +610,20 @@
                 hideLoading();
 
                 if (data.success) {
-                    alert('✅ Sinônimo adicionado com sucesso!');
+                    input.value = '';
                     
-                    // Registrar log
-                    await registrarLog(
+                    // Adicionar ao array local e re-renderizar diretamente (sem chamar GET)
+                    if (data.sinonimo) {
+                        sinonimosAtual.push(data.sinonimo);
+                    }
+                    renderizarSinonimos(sinonimosAtual);
+                    
+                    // Registrar log em background
+                    registrarLog(
                         'ADICIONAR_SINONIMO', 
                         exameAtual.nomePadrao, 
                         `Sinônimo: "${descricao}"`
                     );
-                    
-                    input.value = '';
-                    await carregarSinonimos(exameAtual.id);
                 } else {
                     alert('❌ Erro: ' + data.mensagem);
                 }
