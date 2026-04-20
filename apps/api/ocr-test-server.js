@@ -429,7 +429,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const { sinonimoId } = JSON.parse(body);
         
-        const index = sinonimos.findIndex(s => s.id === sinonimoId);
+        const index = sinonimos.findIndex(s => String(s.id) === String(sinonimoId));
         
         if (index === -1) {
           res.writeHead(404, { 'Content-Type': 'application/json' });

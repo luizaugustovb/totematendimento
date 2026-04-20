@@ -652,17 +652,17 @@
                 hideLoading();
 
                 if (data.success) {
-                    alert('✅ Sinônimo removido com sucesso!');
-                    
-                    // Registrar log
-                    const sinonimo = sinonimosAtual.find(s => s.id === sinonimoId);
-                    await registrarLog(
+                    // Registrar log em background
+                    const sinonimo = sinonimosAtual.find(s => String(s.id) === String(sinonimoId));
+                    registrarLog(
                         'REMOVER_SINONIMO', 
                         exameAtual.nomePadrao, 
                         `Sinônimo: "${sinonimo?.descricaoVariacao}"`
                     );
                     
-                    await carregarSinonimos(exameAtual.id);
+                    // Remover do array local e re-renderizar diretamente
+                    sinonimosAtual = sinonimosAtual.filter(s => String(s.id) !== String(sinonimoId));
+                    renderizarSinonimos(sinonimosAtual);
                 } else {
                     alert('❌ Erro: ' + data.mensagem);
                 }
