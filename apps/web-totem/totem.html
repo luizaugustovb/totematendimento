@@ -1020,24 +1020,38 @@
         }
 
         function extrairNumeroCarteirinha(texto) {
-            // Buscar padrões comuns de número de carteirinha
-            // Exemplo: 12345678901234 (14 dígitos) ou similar
-            const padroes = [
-                /\b\d{14,20}\b/,  // 14-20 dígitos consecutivos
-                /(?:CART|CARTEIRA|N[ºO°])[\s:]*([\d\s-]+)/i,  // "Carteira: 1234..."
-                /(?:MATRICULA|MATRÍCULA)[\s:]*([\d\s-]+)/i    // "Matrícula: 1234..."
-            ];
-            
-            for (const padrao of padroes) {
-                const match = texto.match(padrao);
-                if (match) {
-                    const numero = match[1] ? match[1].replace(/\s|-/g, '') : match[0];
-                    if (numero.length >= 10) {
-                        return numero;
-                    }
+            // Carteirinha Unimed tem 17 dígitos, podendo vir com espaços, pontos ou hífens
+            // Ex: "0023 1000 0012 345 67" ou "0023100000123456 7" ou "001234567890123456"
+
+            const linhas = texto.split('\n');
+
+            // 1) Prioridade máxima: sequência de dígitos/separadores que somam exatamente 17 dígitos
+            for (const linha of linhas) {
+                // Pegar todos os blocos de dígitos separados por espaço, ponto ou hífen
+                const apenasDigitosSep = linha.replace(/[^\d\s.\-]/g, '').trim();
+                const soDigitos = apenasDigitosSep.replace(/[\s.\-]/g, '');
+                if (soDigitos.length === 17 && /^\d{17}$/.test(soDigitos)) {
+                    return soDigitos;
                 }
             }
-            
+
+            // 2) Segunda tentativa: bloco de 17 dígitos consecutivos em qualquer linha
+            const match17 = texto.match(/\b(\d{17})\b/);
+            if (match17) return match17[1];
+
+            // 3) Terceira tentativa: sequência de dígitos com separadores que totalizam 17
+            const matches = texto.match(/[\d][\d\s.\-]{15,25}[\d]/g);
+            if (matches) {
+                for (const m of matches) {
+                    const digits = m.replace(/[\s.\-]/g, '');
+                    if (digits.length === 17) return digits;
+                }
+            }
+
+            // 4) Fallback: 14-20 dígitos consecutivos (melhor que nada)
+            const matchFallback = texto.match(/\b(\d{14,20})\b/);
+            if (matchFallback) return matchFallback[1];
+
             return null;
         }
 
