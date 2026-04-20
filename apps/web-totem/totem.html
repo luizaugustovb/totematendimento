@@ -112,6 +112,37 @@
                             Confirmar <i class="fas fa-arrow-right ml-2"></i>
                         </button>
                     </div>
+
+                    <!-- CPF MANUAL -->
+                    <div class="mt-6 text-center">
+                        <button onclick="mostrarInputCPF()" id="btn-cpf-manual" class="text-blue-600 hover:text-blue-800 underline text-base">
+                            <i class="fas fa-keyboard mr-1"></i> Prefiro digitar meu CPF manualmente
+                        </button>
+                    </div>
+
+                    <div id="cpf-manual-section" class="hidden mt-4 p-6 bg-blue-50 border-2 border-blue-300 rounded-xl">
+                        <h3 class="text-lg font-bold text-blue-900 mb-4">
+                            <i class="fas fa-keyboard mr-2"></i>Digite seu CPF
+                        </h3>
+                        <div class="flex gap-3">
+                            <input type="text"
+                                   id="input-cpf-manual"
+                                   placeholder="000.000.000-00"
+                                   maxlength="14"
+                                   class="flex-1 px-4 py-3 border-2 border-blue-300 rounded-lg text-2xl font-mono text-center focus:border-blue-600 focus:outline-none"
+                                   oninput="formatarInputCPF(this)"
+                                   onkeypress="if(event.key==='Enter') confirmarCPFManual()">
+                            <button onclick="confirmarCPFManual()"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg totem-btn font-bold">
+                                <i class="fas fa-search mr-2"></i>Buscar
+                            </button>
+                        </div>
+                        <div class="mt-3 text-center">
+                            <button onclick="ocultarInputCPF()" class="text-gray-500 hover:text-gray-700 underline text-sm">
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -470,7 +501,7 @@
 
         function mostrarTela(tela) {
             console.log('📺 Mudando para tela:', tela);
-            ['welcome', 'documento', 'confirmacao', 'convenio', 'carteirinha', 'requisicoes', 'sucesso'].forEach(id => {
+            ['welcome', 'documento', 'confirmacao', 'convenio', 'carteirinha', 'requisicoes', 'confirmar-exames', 'selecionar-medico', 'sucesso'].forEach(id => {
                 const el = document.getElementById('screen-' + id);
                 if (el) el.classList.add('hidden');
             });
@@ -866,38 +897,83 @@
             showLoading('Processando carteirinha com OCR...');
             
             try {
-                // Enviar para OCR Google Vision
+                // Enviar para OCR Google Vision (campo correto: image)
                 const response = await fetch('http://localhost:3000/api/ocr/google-vision', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imagem: dadosCliente.carteirinha.imagem })
+                    body: JSON.stringify({ image: dadosCliente.carteirinha.imagem })
                 });
                 
                 const resultado = await response.json();
+                const textoOCR = resultado.texto || '';
                 
                 // Mostrar debug
-                document.getElementById('texto-carteirinha').textContent = resultado.texto;
+                document.getElementById('texto-carteirinha').textContent = textoOCR;
                 document.getElementById('debug-carteirinha').classList.remove('hidden');
                 
-                // Extrair número da carteirinha (buscar padrão numérico)
-                const numeroCarteirinha = extrairNumeroCarteirinha(resultado.texto);
+                // Extrair número da carteirinha
+                const numeroCarteirinha = extrairNumeroCarteirinha(textoOCR);
+                
+                // Extrair nome na carteirinha e comparar com nome do banco
+                const nomeNaCarteirinha = extrairNomeCarteirinha(textoOCR);
+                const nomesCompatíveis = nomeNaCarteirinha ? compararNomes(dadosCliente.nome, nomeNaCarteirinha) : true;
+                
+                console.log('🪪 Número carteirinha:', numeroCarteirinha);
+                console.log('👤 Nome na carteirinha:', nomeNaCarteirinha);
+                console.log('✅ Nomes compatíveis:', nomesCompatíveis);
+                
+                // Verificar compatibilidade de nomes
+                if (nomeNaCarteirinha && !nomesCompatíveis) {
+                    hideLoading();
+                    const continuar = confirm(
+                        `⚠️ ATENÇÃO: O nome na carteirinha não corresponde ao documento apresentado!\n\n` +
+                        `Banco de dados: ${dadosCliente.nome}\n` +
+                        `Carteirinha: ${nomeNaCarteirinha}\n\n` +
+                        `Deseja continuar mesmo assim?`
+                    );
+                    if (!continuar) {
+                        recapturarCarteirinha();
+                        return;
+                    }
+                    showLoading('Registrando dados...');
+                }
                 
                 if (numeroCarteirinha) {
                     dadosCliente.carteirinha.numero = numeroCarteirinha;
-                    document.getElementById('numero-valor').textContent = numeroCarteirinha;
+                    dadosCliente.carteirinha.nomeNaCarteirinha = nomeNaCarteirinha;
+                    dadosCliente.carteirinha.nomeCompativel = nomesCompatíveis;
+                    
+                    document.getElementById('numero-valor').textContent = 
+                        numeroCarteirinha + (nomeNaCarteirinha ? ` | ${nomeNaCarteirinha}` : '');
                     document.getElementById('numero-extraido').classList.remove('hidden');
                     
                     hideLoading();
                     
-                    // Aguardar 2 segundos e ir para requisições
+                    // Ir para requisições
                     setTimeout(async () => {
                         await iniciarCameraRequisicoes();
                         mostrarTela('requisicoes');
-                    }, 2000);
+                    }, 1500);
                 } else {
                     hideLoading();
-                    alert('Não foi possível identificar o número da carteirinha. Tente novamente com melhor iluminação.');
-                    recapturarCarteirinha();
+                    const digitarManual = confirm(
+                        'Não foi possível identificar o número da carteirinha automaticamente.\n\n' +
+                        'Deseja digitar o número manualmente?'
+                    );
+                    if (digitarManual) {
+                        const numero = prompt('Digite o número da carteirinha:');
+                        if (numero && numero.trim()) {
+                            dadosCliente.carteirinha.numero = numero.trim();
+                            dadosCliente.carteirinha.nomeNaCarteirinha = nomeNaCarteirinha;
+                            dadosCliente.carteirinha.nomeCompativel = nomesCompatíveis;
+                            await iniciarCameraRequisicoes();
+                            mostrarTela('requisicoes');
+                        } else {
+                            recapturarCarteirinha();
+                        }
+                    } else {
+                        recapturarCarteirinha();
+                    }
                 }
                 
             } catch (erro) {
@@ -905,6 +981,42 @@
                 console.error('❌ Erro OCR carteirinha:', erro);
                 alert('Erro ao processar carteirinha: ' + erro.message);
             }
+        }
+
+        function extrairNomeCarteirinha(texto) {
+            // Tenta encontrar linhas que pareçam um nome (apenas letras e espaços, 2+ palavras)
+            const linhas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 4);
+            for (const linha of linhas) {
+                const semDigitosEspeciais = linha.replace(/[0-9\.\/\-\:\(\)]/g, '').trim();
+                if (semDigitosEspeciais.length < 5) continue;
+                const palavras = semDigitosEspeciais.trim().split(/\s+/);
+                if (palavras.length >= 2 && /^[A-ZÀ-Úa-zà-ú\s]+$/.test(semDigitosEspeciais)) {
+                    return semDigitosEspeciais.trim().toUpperCase();
+                }
+            }
+            return null;
+        }
+
+        function compararNomes(nomeDB, nomeCarteirinha) {
+            const normalizar = str => str
+                .toUpperCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '') // remover acentos
+                .replace(/[^A-Z\s]/g, '')
+                .trim()
+                .split(/\s+/)
+                .filter(p => p.length > 2);
+            
+            const palavrasDB = normalizar(nomeDB);
+            const palavrasCard = normalizar(nomeCarteirinha);
+            
+            if (palavrasDB.length === 0 || palavrasCard.length === 0) return true;
+            
+            const matches = palavrasDB.filter(p => palavrasCard.includes(p));
+            const score = matches.length / Math.min(palavrasDB.length, palavrasCard.length);
+            
+            console.log(`🔍 Comparação de nomes: ${matches.length}/${Math.min(palavrasDB.length, palavrasCard.length)} palavras = ${(score*100).toFixed(0)}%`);
+            return score >= 0.5;
         }
 
         function extrairNumeroCarteirinha(texto) {
@@ -987,11 +1099,11 @@
             showLoading('Processando requisição com OCR...');
             
             try {
-                // Enviar para OCR Google Vision
+                // Enviar para OCR Google Vision (campo correto: image)
                 const response = await fetch('http://localhost:3000/api/ocr/google-vision', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ imagem: requisicaoAtual.imagem })
+                    body: JSON.stringify({ image: requisicaoAtual.imagem })
                 });
                 
                 const resultado = await response.json();
@@ -1158,35 +1270,63 @@
             showLoading('Salvando atendimento...');
             
             try {
+                // Montar exames detalhados
+                const examesDetalhados = examesConfirmados
+                    .filter(e => e.selecionado && e.exame)
+                    .map(e => ({
+                        id: e.exame.id,
+                        nome: e.exame.nomePadrao,
+                        codigo: e.exame.codigoInterno || e.exame.id
+                    }));
+
+                const payload = {
+                    paciente: {
+                        codigo_cliente: dadosCliente.codigo_cliente,
+                        cpf: dadosCliente.cpf,
+                        nome_completo: dadosCliente.nome,
+                        data_nascimento: dadosCliente.data_nascimento,
+                        telefone: dadosCliente.celular,
+                        endereco: dadosCliente.endereco
+                    },
+                    convenio: convenioSelecionado,
+                    carteirinha: dadosCliente.carteirinha ? {
+                        numero: dadosCliente.carteirinha.numero,
+                        nomeNaCarteirinha: dadosCliente.carteirinha.nomeNaCarteirinha,
+                        nomeCompativel: dadosCliente.carteirinha.nomeCompativel
+                    } : null,
+                    exames: examesDetalhados,
+                    medico: medicoSelecionado ? {
+                        crm: medicoSelecionado.crm,
+                        uf: medicoSelecionado.ufCrm,
+                        nome: medicoSelecionado.nome
+                    } : null,
+                    dadosOCRMedico: requisicoesCapturadas[0]?.dados ? {
+                        nomeMedico: requisicoesCapturadas[0].dados.medico,
+                        crm: requisicoesCapturadas[0].dados.crm
+                    } : null,
+                    imagem_documento: dadosDocumento?.imagem ? true : false,
+                    cliente_confirmado: true
+                };
+
                 const response = await fetch(`${API_URL}/totem/salvar-atendimento`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        paciente: {
-                            codigo_cliente: dadosCliente.codigo_cliente,
-                            cpf: dadosCliente.cpf,
-                            nome_completo: dadosCliente.nome,
-                            data_nascimento: dadosCliente.data_nascimento,
-                            telefone: dadosCliente.celular,
-                            endereco: dadosCliente.endereco
-                        },
-                        convenio: convenioSelecionado,
-                        carteirinha: dadosCliente.carteirinha,
-                        requisicoes: requisicoesCapturadas,
-                        imagem_documento: dadosDocumento.imagem,
-                        cliente_confirmado: true
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 const data = await response.json();
                 
                 if (data.protocolo) {
                     document.getElementById('protocolo').textContent = data.protocolo;
+                    pararCamera();
                     mostrarTela('sucesso');
                     setTimeout(voltarInicio, 30000);
+                } else {
+                    throw new Error(data.mensagem || 'Erro ao salvar atendimento');
                 }
             } catch (err) {
-                alert('Erro: ' + err.message);
+                console.error('❌ Erro ao salvar:', err);
+                alert('Erro ao registrar atendimento: ' + err.message);
             } finally {
                 hideLoading();
             }
@@ -1208,6 +1348,46 @@
             }
         }
 
+        // ============================================
+        // CPF MANUAL
+        // ============================================
+
+        function mostrarInputCPF() {
+            document.getElementById('cpf-manual-section').classList.remove('hidden');
+            document.getElementById('input-cpf-manual').focus();
+        }
+
+        function ocultarInputCPF() {
+            document.getElementById('cpf-manual-section').classList.add('hidden');
+            document.getElementById('input-cpf-manual').value = '';
+        }
+
+        function formatarInputCPF(input) {
+            let v = input.value.replace(/\D/g, '');
+            if (v.length > 11) v = v.substring(0, 11);
+            if (v.length > 9) v = v.substring(0,3)+'.'+v.substring(3,6)+'.'+v.substring(6,9)+'-'+v.substring(9);
+            else if (v.length > 6) v = v.substring(0,3)+'.'+v.substring(3,6)+'.'+v.substring(6);
+            else if (v.length > 3) v = v.substring(0,3)+'.'+v.substring(3);
+            input.value = v;
+        }
+
+        async function confirmarCPFManual() {
+            const input = document.getElementById('input-cpf-manual');
+            const cpf = input.value.replace(/\D/g, '');
+            if (cpf.length !== 11) {
+                alert('Digite um CPF válido com 11 dígitos.');
+                return;
+            }
+            showLoading('Buscando cliente no sistema...');
+            dadosDocumento = { cpf, imagem: null };
+            try {
+                await buscarCliente({ cpf });
+            } catch (err) {
+                hideLoading();
+                alert('Erro ao buscar cliente: ' + err.message);
+            }
+        }
+
         function voltarInicio() {
             pararCamera();
             dadosCliente = null;
@@ -1220,6 +1400,8 @@
             document.getElementById('btn-capturar-doc').classList.remove('hidden');
             document.getElementById('btn-confirmar-doc').classList.add('hidden');
             document.getElementById('debug-ocr').classList.add('hidden');
+            document.getElementById('cpf-manual-section').classList.add('hidden');
+            document.getElementById('input-cpf-manual').value = '';
             mostrarTela('welcome');
         }
 

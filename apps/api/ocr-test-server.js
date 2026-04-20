@@ -34,6 +34,33 @@ let examesCache = []; // Exames sincronizados do SQL Server
 let medicosCache = []; // Médicos sincronizados do SQL Server
 let sinonimos = []; // Sinônimos criados pelo admin
 let logsAuditoria = []; // Logs de ações do admin
+let atendimentos = []; // Atendimentos registrados para autorização
+
+// ============================================
+// PERSISTÊNCIA DE ATENDIMENTOS
+// ============================================
+const ATENDIMENTOS_FILE = path.join(__dirname, 'atendimentos.json');
+
+function carregarAtendimentos() {
+  try {
+    if (fs.existsSync(ATENDIMENTOS_FILE)) {
+      atendimentos = JSON.parse(fs.readFileSync(ATENDIMENTOS_FILE, 'utf8'));
+      console.log(`📋 ${atendimentos.length} atendimentos carregados`);
+    }
+  } catch (e) {
+    console.warn('⚠️  Não foi possível carregar atendimentos.json:', e.message);
+  }
+}
+
+function salvarAtendimentos() {
+  try {
+    fs.writeFileSync(ATENDIMENTOS_FILE, JSON.stringify(atendimentos, null, 2));
+  } catch (e) {
+    console.error('❌ Erro ao salvar atendimentos.json:', e.message);
+  }
+}
+
+carregarAtendimentos();
 
 // ============================================
 // LISTAS DE EXCLUSÃO (persistidas em arquivo)
@@ -187,6 +214,62 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ erro: erro.message }));
       }
     });
+    return;
+  }
+
+  // Salvar Atendimento (Totem → aguardando autorização)
+  if (req.url === '/api/totem/salvar-atendimento' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const dados = JSON.parse(body);
+
+        const protocolo = 'AT' + Date.now();
+        const atendimento = {
+          id: protocolo,
+          protocolo,
+          status: 'AGUARDANDO_AUTORIZACAO',
+          criadoEm: new Date().toISOString(),
+          paciente: dados.paciente || null,
+          convenio: dados.convenio || null,
+          carteirinha: dados.carteirinha || null,
+          exames: dados.exames || [],
+          medico: dados.medico || null,
+          dadosOCRMedico: dados.dadosOCRMedico || null
+        };
+
+        atendimentos.push(atendimento);
+        salvarAtendimentos();
+
+        console.log(`✅ Atendimento registrado: ${protocolo} | Paciente: ${dados.paciente?.nome_completo} | Convênio: ${dados.convenio} | Exames: ${atendimento.exames.length}`);
+        if (dados.carteirinha?.numero) {
+          console.log(`🪪 Carteirinha: ${dados.carteirinha.numero} | Nome compatível: ${dados.carteirinha.nomeCompativel}`);
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          protocolo,
+          mensagem: 'Atendimento registrado com sucesso'
+        }));
+      } catch (erro) {
+        console.error('❌ Erro ao salvar atendimento:', erro.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, erro: erro.message }));
+      }
+    });
+    return;
+  }
+
+  // Listar Atendimentos (Admin)
+  if (req.url === '/api/totem/atendimentos' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      atendimentos,
+      total: atendimentos.length
+    }));
     return;
   }
 
