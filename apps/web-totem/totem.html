@@ -1425,10 +1425,23 @@
             
             // Coletar todos os exames de todas as requisições
             const todosExames = [];
+            const codigosVistos = new Set();
+
             for (const req of requisicoesCapturadas) {
                 for (const exameTexto of req.dados.exames) {
-                    // Buscar exame no backend usando busca inteligente
                     const resultado = await buscarExameInteligente(exameTexto);
+
+                    // Deduplicar: se já existe o mesmo exame (por código), pular
+                    const chave = resultado.exame
+                        ? (resultado.exame.codigoInterno || resultado.exame.nomePadrao)
+                        : exameTexto.trim().toUpperCase();
+
+                    if (codigosVistos.has(chave)) {
+                        console.log(`🔁 Exame duplicado ignorado: ${chave}`);
+                        continue;
+                    }
+                    codigosVistos.add(chave);
+
                     todosExames.push({
                         textoOcr: exameTexto,
                         exame: resultado.exame,
