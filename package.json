@@ -1,0 +1,38 @@
+{
+  "name": "laboratorio-autoatendimento",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de autoatendimento para laboratório de análises clínicas",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "db:migrate": "cd apps/api && npx prisma migrate dev",
+    "db:seed": "cd apps/api && npx prisma db seed",
+    "db:studio": "cd apps/api && npx prisma studio",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "start:totem": "cd apps/web-totem && npm run dev",
+    "start:admin": "cd apps/web-admin && npm run dev",
+    "start:api": "cd apps/api && npm run dev"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "prettier": "^3.0.0",
+    "turbo": "^1.10.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@colors/colors": "^1.6.0",
+    "@google-cloud/vision": "^5.3.5",
+    "is": "^3.3.2"
+  }
+}

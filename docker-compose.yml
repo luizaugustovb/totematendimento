@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15
+    container_name: lab-postgres
+    environment:
+      POSTGRES_DB: laboratorio_db
+      POSTGRES_USER: laboratorio
+      POSTGRES_PASSWORD: lab123456
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    networks:
+      - lab-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laboratorio -d laboratorio_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis para cache e filas
+  redis:
+    image: redis:7-alpine
+    container_name: lab-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - lab-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # API Backend
+  api:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile
+    container_name: lab-api
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://laboratorio:lab123456@postgres:5432/laboratorio_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: sua_chave_secreta_muito_forte_aqui
+      GOOGLE_VISION_API_KEY: ""
+      CLAUDE_API_KEY: ""
+      VIICIO_API_URL: ""
+      VIICIO_API_TOKEN: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    networks:
+      - lab-network
+    restart: unless-stopped
+
+  # Interface Administrativa
+  web-admin:
+    build:
+      context: .
+      dockerfile: ./apps/web-admin/Dockerfile
+    container_name: lab-web-admin
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web-admin:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - lab-network
+    restart: unless-stopped
+
+  # Interface do Totem
+  web-totem:
+    build:
+      context: .
+      dockerfile: ./apps/web-totem/Dockerfile
+    container_name: lab-web-totem
+    ports:
+      - "3002:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web-totem:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - lab-network
+    restart: unless-stopped
+
+  # Worker para processamento de filas
+  worker:
+    build:
+      context: .
+      dockerfile: ./apps/api/Dockerfile.worker
+    container_name: lab-worker
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://laboratorio:lab123456@postgres:5432/laboratorio_db
+      REDIS_URL: redis://redis:6379
+      GOOGLE_VISION_API_KEY: ""
+      CLAUDE_API_KEY: ""
+      VIICIO_API_URL: ""
+      VIICIO_API_TOKEN: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+      - ./python-scripts:/app/python-scripts
+    networks:
+      - lab-network
+    restart: unless-stopped
+
+networks:
+  lab-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

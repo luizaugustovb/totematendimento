@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Gerenciar Sinônimos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    
+    <!-- Header -->
+    <header class="bg-white shadow-md">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <h1 class="text-2xl font-bold text-gray-900">
+                    <i class="fas fa-cog mr-2 text-blue-600"></i>
+                    Admin - Gerenciar Sinônimos
+                </h1>
+                <button onclick="sincronizarManual()" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                    <i class="fas fa-sync mr-2"></i>Sincronizar Agora
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-6 py-8">
+        
+        <!-- Status da Sincronização -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-database mr-2 text-purple-600"></i>
+                Status da Sincronização
+            </h2>
+            <div class="grid grid-cols-2 gap-6">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <h3 class="font-bold text-blue-900 mb-2">Exames</h3>
+                    <p class="text-sm text-gray-700">
+                        <b>Total:</b> <span id="status-exames-total">-</span><br>
+                        <b>Última sincronização:</b> <span id="status-exames-data">-</span><br>
+                        <b>Último código:</b> <span id="status-exames-codigo">-</span>
+                    </p>
+                </div>
+                <div class="bg-green-50 p-4 rounded-lg">
+                    <h3 class="font-bold text-green-900 mb-2">Médicos</h3>
+                    <p class="text-sm text-gray-700">
+                        <b>Total:</b> <span id="status-medicos-total">-</span><br>
+                        <b>Última sincronização:</b> <span id="status-medicos-data">-</span><br>
+                        <b>Último código:</b> <span id="status-medicos-codigo">-</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Buscar Exames -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-4">
+                <i class="fas fa-search mr-2 text-blue-600"></i>
+                Buscar Exame
+            </h2>
+            <div class="flex gap-3 mb-4">
+                <input type="text" 
+                       id="input-busca" 
+                       placeholder="Digite o nome do exame..."
+                       class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                       onkeyup="buscarExames(event)">
+                <button onclick="buscarExames()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg">
+                    <i class="fas fa-search mr-2"></i>Buscar
+                </button>
+            </div>
+            
+            <!-- Resultados da busca -->
+            <div id="resultados-busca" class="hidden">
+                <h3 class="font-bold text-gray-800 mb-3">Resultados:</h3>
+                <div id="lista-exames" class="space-y-2 max-h-96 overflow-y-auto">
+                    <!-- Exames serão inseridos aqui -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Gerenciar Médicos -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-gray-900">
+                    <i class="fas fa-user-md mr-2 text-green-600"></i>
+                    Gerenciar Médicos
+                </h2>
+                <button onclick="carregarMedicos()" 
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                    <i class="fas fa-sync mr-2"></i>Atualizar Lista
+                </button>
+            </div>
+
+            <!-- Filtros -->
+            <div class="flex gap-3 mb-4">
+                <input type="text" 
+                       id="filtro-medico-nome" 
+                       placeholder="Filtrar por nome..."
+                       class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none"
+                       onkeyup="filtrarMedicos()">
+                <input type="text" 
+                       id="filtro-medico-crm" 
+                       placeholder="Filtrar por CRM..."
+                       class="w-64 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none"
+                       onkeyup="filtrarMedicos()">
+            </div>
+
+            <!-- Lista de Médicos -->
+            <div id="lista-medicos" class="max-h-96 overflow-y-auto">
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-stethoscope text-4xl mb-2"></i>
+                    <p>Clique em "Atualizar Lista" para carregar os médicos</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Editar Médico -->
+        <div id="modal-medico" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-2xl p-8 max-w-2xl w-full max-h-screen overflow-y-auto">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">
+                        <i class="fas fa-user-md mr-2 text-green-600"></i>
+                        Editar Médico
+                    </h2>
+                    <button onclick="fecharModalMedico()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+
+                <!-- Formulário de Edição -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">CRM</label>
+                        <input type="text" 
+                               id="edit-crm" 
+                               readonly
+                               class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Nome do Médico</label>
+                        <input type="text" 
+                               id="edit-nome" 
+                               class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">UF</label>
+                        <input type="text" 
+                               id="edit-uf" 
+                               maxlength="2"
+                               class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Conselho</label>
+                        <input type="text" 
+                               id="edit-conselho" 
+                               class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none">
+                    </div>
+
+                    <div class="flex gap-3 mt-6">
+                        <button onclick="salvarMedico()" 
+                                class="flex-1 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-bold">
+                            <i class="fas fa-save mr-2"></i>Salvar Alterações
+                        </button>
+                        <button onclick="fecharModalMedico()" 
+                                class="px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-100">
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Gerenciar Sinônimos -->
+        <div id="modal-sinonimos" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-2xl p-8 max-w-3xl w-full max-h-screen overflow-y-auto">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">
+                        <i class="fas fa-tags mr-2 text-purple-600"></i>
+                        Gerenciar Sinônimos
+                    </h2>
+                    <button onclick="fecharModal()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+
+                <!-- Info do Exame -->
+                <div class="bg-blue-50 p-4 rounded-lg mb-6">
+                    <h3 class="font-bold text-blue-900 mb-2">Exame:</h3>
+                    <p id="modal-exame-nome" class="text-lg font-bold text-gray-900"></p>
+                    <p class="text-sm text-gray-600">
+                        <span id="modal-exame-codigo"></span> | 
+                        <span id="modal-exame-tuss"></span>
+                    </p>
+                </div>
+
+                <!-- Adicionar Sinônimo -->
+                <div class="mb-6">
+                    <h3 class="font-bold text-gray-800 mb-3">Adicionar Novo Sinônimo:</h3>
+                    <div class="flex gap-3">
+                        <input type="text" 
+                               id="input-novo-sinonimo" 
+                               placeholder="Digite o sinônimo..."
+                               class="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                               onkeyup="if(event.key === 'Enter') adicionarSinonimo()">
+                        <button onclick="adicionarSinonimo()" 
+                                class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg">
+                            <i class="fas fa-plus mr-2"></i>Adicionar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Lista de Sinônimos -->
+                <div>
+                    <h3 class="font-bold text-gray-800 mb-3">Sinônimos Cadastrados:</h3>
+                    <div id="lista-sinonimos" class="space-y-2 max-h-64 overflow-y-auto">
+                        <!-- Sinônimos serão inseridos aqui -->
+                    </div>
+                    <div id="sem-sinonimos" class="hidden text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox text-4xl mb-2"></i>
+                        <p>Nenhum sinônimo cadastrado ainda.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal: Logs de Auditoria -->
+        <div id="modal-logs" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-2xl p-8 max-w-5xl w-full max-h-screen overflow-y-auto">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">
+                        <i class="fas fa-history mr-2 text-orange-600"></i>
+                        Logs de Auditoria
+                    </h2>
+                    <button onclick="fecharModalLogs()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
+
+                <!-- Filtros -->
+                <div class="grid grid-cols-4 gap-3 mb-4">
+                    <select id="filtro-acao" class="px-4 py-2 border-2 border-gray-300 rounded-lg">
+                        <option value="">Todas as ações</option>
+                        <option value="ADICIONAR_SINONIMO">Adicionar Sinônimo</option>
+                        <option value="REMOVER_SINONIMO">Remover Sinônimo</option>
+                        <option value="SINCRONIZAR">Sincronizar</option>
+                        <option value="BUSCAR_EXAME">Buscar Exame</option>
+                    </select>
+                    <input type="date" id="filtro-data-inicio" class="px-4 py-2 border-2 border-gray-300 rounded-lg">
+                    <input type="date" id="filtro-data-fim" class="px-4 py-2 border-2 border-gray-300 rounded-lg">
+                    <button onclick="filtrarLogs()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                        <i class="fas fa-filter mr-2"></i>Filtrar
+                    </button>
+                </div>
+
+                <!-- Lista de Logs -->
+                <div id="lista-logs" class="space-y-2 max-h-96 overflow-y-auto">
+                    <!-- Logs serão inseridos aqui -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Botão Flutuante - Ver Logs -->
+    <button onclick="abrirModalLogs()" 
+            class="fixed bottom-6 right-6 bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-full shadow-2xl">
+        <i class="fas fa-history text-2xl"></i>
+    </button>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 text-center">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-500 mx-auto mb-4"></div>
+            <p id="loading-text" class="text-gray-800 font-bold text-xl">Processando...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const USER_ID = 'admin'; // TODO: Implementar autenticação real
+        
+        let exameAtual = null;
+        let sinonimosAtual = [];
+
+        // ============================================
+        // INICIALIZAÇÃO
+        // ============================================
+
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarStatusSync();
+            setInterval(carregarStatusSync, 30000); // Atualiza a cada 30s
+        });
+
+        // ============================================
+        // STATUS DA SINCRONIZAÇÃO
+        // ============================================
+
+        async function carregarStatusSync() {
+            try {
+                const response = await fetch(`${API_URL}/totem/sync/status`);
+                const data = await response.json();
+
+                if (data.success) {
+                    // Exames
+                    document.getElementById('status-exames-total').textContent = 
+                        data.exames.totalSincronizados || '0';
+                    document.getElementById('status-exames-data').textContent = 
+                        data.exames.ultimaSincronizacao 
+                            ? new Date(data.exames.ultimaSincronizacao).toLocaleString('pt-BR')
+                            : 'Nunca';
+                    document.getElementById('status-exames-codigo').textContent = 
+                        data.exames.ultimoCodigoSync || '0';
+
+                    // Médicos
+                    document.getElementById('status-medicos-total').textContent = 
+                        data.medicos.totalSincronizados || '0';
+                    document.getElementById('status-medicos-data').textContent = 
+                        data.medicos.ultimaSincronizacao 
+                            ? new Date(data.medicos.ultimaSincronizacao).toLocaleString('pt-BR')
+                            : 'Nunca';
+                    document.getElementById('status-medicos-codigo').textContent = 
+                        data.medicos.ultimoCodigoSync || '0';
+                }
+            } catch (erro) {
+                console.error('Erro ao carregar status:', erro);
+            }
+        }
+
+        async function sincronizarManual() {
+            if (!confirm('Deseja sincronizar exames e médicos do SQL Server agora?')) {
+                return;
+            }
+
+            showLoading('Sincronizando...');
+
+            try {
+                const response = await fetch(`${API_URL}/totem/sync/manual`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'ambos' })
+                });
+
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.sucesso) {
+                    alert('✅ Sincronização iniciada com sucesso!');
+                    
+                    // Registrar log
+                    await registrarLog('SINCRONIZAR', 'Manual', 'Sincronização manual iniciada');
+                    
+                    setTimeout(carregarStatusSync, 2000);
+                } else {
+                    alert('❌ Erro ao sincronizar: ' + data.mensagem);
+                }
+            } catch (erro) {
+                hideLoading();
+                alert('❌ Erro: ' + erro.message);
+            }
+        }
+
+        // ============================================
+        // BUSCAR EXAMES
+        // ============================================
+
+        async function buscarExames(event) {
+            if (event && event.key && event.key !== 'Enter') return;
+
+            const query = document.getElementById('input-busca').value.trim();
+
+            if (!query || query.length < 2) {
+                document.getElementById('resultados-busca').classList.add('hidden');
+                return;
+            }
+
+            showLoading('Buscando...');
+
+            try {
+                const response = await fetch(`${API_URL}/totem/exames/buscar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ textoOcr: query, limit: 20 })
+                });
+
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success && data.exames) {
+                    renderizarResultados(data.exames);
+                    
+                    // Registrar log
+                    await registrarLog('BUSCAR_EXAME', query, `${data.exames.length} resultado(s)`);
+                } else {
+                    document.getElementById('resultados-busca').classList.add('hidden');
+                    alert('Nenhum exame encontrado.');
+                }
+            } catch (erro) {
+                hideLoading();
+                alert('Erro: ' + erro.message);
+            }
+        }
+
+        function renderizarResultados(exames) {
+            const container = document.getElementById('lista-exames');
+            const wrapper = document.getElementById('resultados-busca');
+
+            container.innerHTML = exames.map(item => {
+                const scoreClass = item.score >= 0.9 ? 'bg-green-100 border-green-400' : 
+                                  item.score >= 0.7 ? 'bg-yellow-100 border-yellow-400' : 
+                                  'bg-red-100 border-red-400';
+
+                return `
+                    <div class="border-2 ${scoreClass} rounded-lg p-4 flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-gray-900">${item.exame.nomePadrao}</p>
+                            <p class="text-sm text-gray-600">
+                                Código: ${item.exame.codigoInterno || 'N/A'} | 
+                                TUSS: ${item.exame.codigoTuss || 'N/A'} |
+                                Match: ${item.matchTipo}
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold bg-blue-200 text-blue-800">
+                                ${Math.round(item.score * 100)}%
+                            </span>
+                            <button onclick='abrirModalSinonimos(${JSON.stringify(item.exame)})' 
+                                    class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">
+                                <i class="fas fa-tags mr-2"></i>Sinônimos
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            wrapper.classList.remove('hidden');
+        }
+
+        // ============================================
+        // MODAL DE SINÔNIMOS
+        // ============================================
+
+        async function abrirModalSinonimos(exame) {
+            exameAtual = exame;
+
+            // Atualizar info do exame
+            document.getElementById('modal-exame-nome').textContent = exame.nomePadrao;
+            document.getElementById('modal-exame-codigo').textContent = 
+                `Código: ${exame.codigoInterno || 'N/A'}`;
+            document.getElementById('modal-exame-tuss').textContent = 
+                `TUSS: ${exame.codigoTuss || 'N/A'}`;
+
+            // Carregar sinônimos
+            await carregarSinonimos(exame.id);
+
+            // Mostrar modal
+            document.getElementById('modal-sinonimos').classList.remove('hidden');
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-sinonimos').classList.add('hidden');
+            document.getElementById('input-novo-sinonimo').value = '';
+            exameAtual = null;
+        }
+
+        async function carregarSinonimos(exameId) {
+            showLoading('Carregando sinônimos...');
+
+            try {
+                const response = await fetch(`${API_URL}/totem/sinonimos/${exameId}`);
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success && data.sinonimos) {
+                    sinonimosAtual = data.sinonimos;
+                    renderizarSinonimos(data.sinonimos);
+                } else {
+                    sinonimosAtual = [];
+                    renderizarSinonimos([]);
+                }
+            } catch (erro) {
+                hideLoading();
+                console.error('Erro ao carregar sinônimos:', erro);
+                renderizarSinonimos([]);
+            }
+        }
+
+        function renderizarSinonimos(sinonimos) {
+            const container = document.getElementById('lista-sinonimos');
+            const msgVazio = document.getElementById('sem-sinonimos');
+
+            if (sinonimos.length === 0) {
+                container.innerHTML = '';
+                msgVazio.classList.remove('hidden');
+                return;
+            }
+
+            msgVazio.classList.add('hidden');
+
+            container.innerHTML = sinonimos.map(sin => {
+                const escopoClass = sin.escopo === 'GLOBAL' ? 'bg-blue-100 text-blue-800' : 
+                                   sin.escopo === 'CONVENIO' ? 'bg-green-100 text-green-800' : 
+                                   'bg-purple-100 text-purple-800';
+
+                return `
+                    <div class="border-2 border-gray-200 rounded-lg p-3 flex items-center justify-between">
+                        <div class="flex-1">
+                            <p class="font-bold text-gray-900">${sin.descricaoVariacao}</p>
+                            <p class="text-xs text-gray-600">
+                                <span class="px-2 py-1 rounded ${escopoClass}">${sin.escopo}</span>
+                                | Criado em ${new Date(sin.createdAt).toLocaleDateString('pt-BR')}
+                                ${sin.criadoPorUsuario ? ` por ${sin.criadoPorUsuario.nome}` : ''}
+                            </p>
+                        </div>
+                        <button onclick='removerSinonimo("${sin.id}")' 
+                                class="text-red-600 hover:text-red-800 px-3 py-1">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function adicionarSinonimo() {
+            const input = document.getElementById('input-novo-sinonimo');
+            const descricao = input.value.trim();
+
+            if (!descricao) {
+                alert('Digite um sinônimo válido!');
+                return;
+            }
+
+            if (!exameAtual) {
+                alert('Erro: Exame não selecionado');
+                return;
+            }
+
+            showLoading('Adicionando sinônimo...');
+
+            try {
+                const response = await fetch(`${API_URL}/totem/sinonimos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        exameId: exameAtual.id,
+                        descricaoVariacao: descricao,
+                        criadoPorUsuarioId: USER_ID // TODO: Pegar do sistema de auth
+                    })
+                });
+
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success) {
+                    alert('✅ Sinônimo adicionado com sucesso!');
+                    
+                    // Registrar log
+                    await registrarLog(
+                        'ADICIONAR_SINONIMO', 
+                        exameAtual.nomePadrao, 
+                        `Sinônimo: "${descricao}"`
+                    );
+                    
+                    input.value = '';
+                    await carregarSinonimos(exameAtual.id);
+                } else {
+                    alert('❌ Erro: ' + data.mensagem);
+                }
+            } catch (erro) {
+                hideLoading();
+                alert('❌ Erro: ' + erro.message);
+            }
+        }
+
+        async function removerSinonimo(sinonimoId) {
+            if (!confirm('Deseja realmente remover este sinônimo?')) {
+                return;
+            }
+
+            showLoading('Removendo...');
+
+            try {
+                const response = await fetch(`${API_URL}/totem/sinonimos/remover`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sinonimoId })
+                });
+
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success) {
+                    alert('✅ Sinônimo removido com sucesso!');
+                    
+                    // Registrar log
+                    const sinonimo = sinonimosAtual.find(s => s.id === sinonimoId);
+                    await registrarLog(
+                        'REMOVER_SINONIMO', 
+                        exameAtual.nomePadrao, 
+                        `Sinônimo: "${sinonimo?.descricaoVariacao}"`
+                    );
+                    
+                    await carregarSinonimos(exameAtual.id);
+                } else {
+                    alert('❌ Erro: ' + data.mensagem);
+                }
+            } catch (erro) {
+                hideLoading();
+                alert('❌ Erro: ' + erro.message);
+            }
+        }
+
+        // ============================================
+        // LOGS DE AUDITORIA
+        // ============================================
+
+        async function abrirModalLogs() {
+            await carregarLogs();
+            document.getElementById('modal-logs').classList.remove('hidden');
+        }
+
+        function fecharModalLogs() {
+            document.getElementById('modal-logs').classList.add('hidden');
+        }
+
+        async function carregarLogs(filtros = {}) {
+            showLoading('Carregando logs...');
+
+            try {
+                const params = new URLSearchParams(filtros);
+                const response = await fetch(`${API_URL}/totem/logs/auditoria?${params}`);
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success && data.logs) {
+                    renderizarLogs(data.logs);
+                } else {
+                    renderizarLogs([]);
+                }
+            } catch (erro) {
+                hideLoading();
+                console.error('Erro ao carregar logs:', erro);
+                renderizarLogs([]);
+            }
+        }
+
+        function renderizarLogs(logs) {
+            const container = document.getElementById('lista-logs');
+
+            if (logs.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox text-4xl mb-2"></i>
+                        <p>Nenhum log encontrado.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = logs.map(log => {
+                const acaoClass = log.acao.includes('ADICIONAR') ? 'bg-green-100 text-green-800' : 
+                                 log.acao.includes('REMOVER') ? 'bg-red-100 text-red-800' : 
+                                 log.acao.includes('SINCRONIZAR') ? 'bg-blue-100 text-blue-800' : 
+                                 'bg-gray-100 text-gray-800';
+
+                return `
+                    <div class="border-2 border-gray-200 rounded-lg p-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${acaoClass}">
+                                ${log.acao.replace(/_/g, ' ')}
+                            </span>
+                            <span class="text-xs text-gray-600">
+                                ${new Date(log.createdAt).toLocaleString('pt-BR')}
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-800">
+                            <b>Entidade:</b> ${log.entidade || 'N/A'}<br>
+                            <b>Detalhes:</b> ${log.detalhes || 'N/A'}<br>
+                            ${log.usuario ? `<b>Usuário:</b> ${log.usuario}<br>` : ''}
+                            ${log.ip ? `<b>IP:</b> ${log.ip}` : ''}
+                        </p>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function filtrarLogs() {
+            const filtros = {
+                acao: document.getElementById('filtro-acao').value,
+                dataInicio: document.getElementById('filtro-data-inicio').value,
+                dataFim: document.getElementById('filtro-data-fim').value
+            };
+
+            await carregarLogs(filtros);
+        }
+
+        async function registrarLog(acao, entidade, detalhes) {
+            try {
+                await fetch(`${API_URL}/totem/logs/auditoria`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        acao,
+                        entidade,
+                        detalhes,
+                        usuario: USER_ID,
+                        ip: 'admin-panel'
+                    })
+                });
+            } catch (erro) {
+                console.error('Erro ao registrar log:', erro);
+            }
+        }
+
+        // ============================================
+        // GERENCIAMENTO DE MÉDICOS
+        // ============================================
+
+        let medicosCompleto = [];
+        let medicosFiltrado = [];
+        let medicoAtual = null;
+
+        async function carregarMedicos() {
+            showLoading('Carregando médicos...');
+
+            try {
+                const response = await fetch(`${API_URL}/admin/medicos`);
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success && data.medicos) {
+                    medicosCompleto = data.medicos;
+                    medicosFiltrado = [...medicosCompleto];
+                    renderizarMedicos();
+                } else {
+                    alert('Erro ao carregar médicos');
+                }
+            } catch (erro) {
+                hideLoading();
+                console.error('Erro ao carregar médicos:', erro);
+                alert('Erro ao conectar com o servidor');
+            }
+        }
+
+        function filtrarMedicos() {
+            const filtroNome = document.getElementById('filtro-medico-nome').value.toLowerCase();
+            const filtroCRM = document.getElementById('filtro-medico-crm').value.toLowerCase();
+
+            medicosFiltrado = medicosCompleto.filter(medico => {
+                const nome = (medico.nome_medico || '').toLowerCase();
+                const crm = (medico.crm_medico || '').toLowerCase();
+
+                return nome.includes(filtroNome) && crm.includes(filtroCRM);
+            });
+
+            renderizarMedicos();
+        }
+
+        function renderizarMedicos() {
+            const container = document.getElementById('lista-medicos');
+
+            if (medicosFiltrado.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-user-md text-4xl mb-2"></i>
+                        <p>Nenhum médico encontrado</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Mostrar apenas os primeiros 100 para performance
+            const medicosExibir = medicosFiltrado.slice(0, 100);
+
+            container.innerHTML = `
+                ${medicosFiltrado.length > 100 ? 
+                    `<div class="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3 mb-3 text-sm text-yellow-800">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        Mostrando 100 de ${medicosFiltrado.length} médicos. Use os filtros para refinar.
+                    </div>` : 
+                    `<div class="bg-blue-50 border-2 border-blue-300 rounded-lg p-3 mb-3 text-sm text-blue-800">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        Total: ${medicosFiltrado.length} médicos
+                    </div>`
+                }
+                <div class="space-y-2">
+                    ${medicosExibir.map(medico => `
+                        <div class="border-2 border-gray-200 rounded-lg p-4 hover:border-green-400 transition-all">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1">
+                                    <h3 class="font-bold text-gray-900 text-lg">
+                                        ${medico.nome_medico || 'Nome não definido'}
+                                    </h3>
+                                    <p class="text-sm text-gray-600 mt-1">
+                                        <span class="font-semibold">CRM:</span> ${medico.crm_medico || 'N/A'} | 
+                                        <span class="font-semibold">UF:</span> ${medico.uf_medico || 'N/A'} | 
+                                        <span class="font-semibold">Conselho:</span> ${medico.conselho_medico || 'N/A'}
+                                    </p>
+                                </div>
+                                <button onclick='abrirModalMedico(${JSON.stringify(medico).replace(/'/g, "&apos;")})' 
+                                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg ml-4">
+                                    <i class="fas fa-edit mr-2"></i>Editar
+                                </button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function abrirModalMedico(medico) {
+            medicoAtual = medico;
+
+            document.getElementById('edit-crm').value = medico.crm_medico || '';
+            document.getElementById('edit-nome').value = medico.nome_medico || '';
+            document.getElementById('edit-uf').value = medico.uf_medico || '';
+            document.getElementById('edit-conselho').value = medico.conselho_medico || '';
+
+            document.getElementById('modal-medico').classList.remove('hidden');
+        }
+
+        function fecharModalMedico() {
+            document.getElementById('modal-medico').classList.add('hidden');
+            medicoAtual = null;
+        }
+
+        async function salvarMedico() {
+            if (!medicoAtual) return;
+
+            const dadosAtualizados = {
+                nome_medico: document.getElementById('edit-nome').value.trim(),
+                uf_medico: document.getElementById('edit-uf').value.trim().toUpperCase(),
+                conselho_medico: document.getElementById('edit-conselho').value.trim()
+            };
+
+            if (!dadosAtualizados.nome_medico) {
+                alert('O nome do médico é obrigatório');
+                return;
+            }
+
+            showLoading('Salvando alterações...');
+
+            try {
+                const response = await fetch(`${API_URL}/admin/medicos/${medicoAtual.crm_medico}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dadosAtualizados)
+                });
+
+                const data = await response.json();
+
+                hideLoading();
+
+                if (data.success) {
+                    alert('Médico atualizado com sucesso!');
+                    
+                    // Atualizar cache local
+                    const index = medicosCompleto.findIndex(m => m.crm_medico === medicoAtual.crm_medico);
+                    if (index !== -1) {
+                        medicosCompleto[index] = { ...medicosCompleto[index], ...dadosAtualizados };
+                    }
+
+                    // Registrar log
+                    await registrarLog(
+                        'EDITAR_MEDICO',
+                        `Médico CRM ${medicoAtual.crm_medico}`,
+                        `Nome: ${dadosAtualizados.nome_medico}`
+                    );
+
+                    fecharModalMedico();
+                    filtrarMedicos(); // Re-renderizar lista
+                } else {
+                    alert('Erro ao salvar: ' + (data.mensagem || 'Erro desconhecido'));
+                }
+            } catch (erro) {
+                hideLoading();
+                console.error('Erro ao salvar médico:', erro);
+                alert('Erro ao conectar com o servidor');
+            }
+        }
+
+        // ============================================
+        // UTILITÁRIOS
+        // ============================================
+
+        function showLoading(text = 'Processando...') {
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Totem de Autoatendimento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        .totem-screen { height: 100vh; overflow: hidden; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .totem-btn { transition: all 0.3s ease; }
+        .totem-btn:hover { transform: scale(1.05); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        .totem-btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-green-50 to-emerald-100 totem-screen">
+
+    <!-- Header -->
+    <header class="bg-white shadow-lg">
+        <div class="container mx-auto px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-flask text-4xl text-green-600 mr-4"></i>
+                    <h1 class="text-2xl font-bold text-gray-900">Laboratório Autoatendimento</h1>
+                </div>
+                <div class="text-right">
+                    <div id="current-time" class="text-2xl font-bold text-gray-900"></div>
+                    <div id="current-date" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+            <div class="mt-3 text-center">
+                <span class="inline-block bg-yellow-100 text-yellow-800 text-xs px-3 py-1 rounded-full font-mono">
+                    DEBUG: Tela = <span id="debug-tela">welcome</span>
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="container mx-auto px-8 py-12">
+        
+        <!-- TELA 1: INICIAL -->
+        <div id="screen-welcome" class="fade-in">
+            <div class="max-w-2xl mx-auto text-center">
+                <i class="fas fa-flask text-8xl text-green-600 mb-8"></i>
+                <h2 class="text-5xl font-bold text-gray-900 mb-12">Bem-vindo!</h2>
+                
+                <button onclick="iniciarAtendimento()" class="totem-btn bg-green-600 hover:bg-green-700 text-white p-12 rounded-2xl shadow-2xl w-full max-w-md mb-4">
+                    <i class="fas fa-user-plus text-6xl mb-6"></i>
+                    <h3 class="text-3xl font-bold mb-4">Iniciar Atendimento</h3>
+                    <p class="text-lg opacity-90">Toque para começar</p>
+                </button>
+                
+                <button onclick="iniciarTesteSemCamera()" class="totem-btn bg-yellow-500 hover:bg-yellow-600 text-white p-8 rounded-xl shadow-xl w-full max-w-md">
+                    <i class="fas fa-bug text-4xl mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">Modo Teste</h3>
+                    <p class="text-sm opacity-90">CPF: 013.983.734-51</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- TELA 2: DOCUMENTO -->
+        <div id="screen-documento" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-id-card text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture seu Documento</h2>
+                        <p class="text-gray-600">Posicione sua CNH ou RG na frente da câmera</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-xl overflow-hidden">
+                            <video id="video-documento" class="w-full h-full object-cover" autoplay playsinline></video>
+                            <canvas id="canvas-documento" class="hidden"></canvas>
+                            <div id="preview-documento" class="hidden absolute inset-0 flex items-center justify-center bg-black">
+                                <img id="img-documento" class="max-w-full max-h-full">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- DEBUG OCR -->
+                    <div id="debug-ocr" class="hidden mb-8 bg-yellow-50 border-2 border-yellow-400 rounded-xl p-6">
+                        <h3 class="text-xl font-bold text-yellow-900 mb-4">
+                            <i class="fas fa-bug mr-2"></i>
+                            Debug OCR - Google Vision
+                        </h3>
+                        
+                        <!-- Texto OCR -->
+                        <div class="bg-white p-4 rounded-lg">
+                            <p class="text-sm font-bold text-gray-700 mb-2">Texto Capturado:</p>
+                            <pre id="texto-ocr" class="text-sm text-gray-800 whitespace-pre-wrap max-h-64 overflow-y-auto"></pre>
+                        </div>
+                        
+                        <!-- CPF Extraído -->
+                        <div id="cpf-extraido" class="hidden mt-4 p-3 bg-green-100 rounded-lg">
+                            <span class="font-bold text-green-900">CPF Identificado: </span>
+                            <span id="cpf-valor" class="text-green-700 font-mono text-lg"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="voltarInicio()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar
+                        </button>
+                        <button id="btn-capturar-doc" onclick="capturarDocumento()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>Capturar
+                        </button>
+                        <button id="btn-confirmar-doc" onclick="confirmarDocumento()" class="hidden bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            Confirmar <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 3: CONFIRMAÇÃO -->
+        <div id="screen-confirmacao" class="hidden fade-in">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-user-check text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Confirme seus Dados</h2>
+                    </div>
+                    
+                    <div id="dados-cliente" class="space-y-4 mb-8 bg-gray-50 p-6 rounded-xl"></div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="voltarDocumento()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar
+                        </button>
+                        <button onclick="confirmarCliente()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-check mr-2"></i>Confirmar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 4: CONVÊNIO -->
+        <div id="screen-convenio" class="hidden fade-in">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-hospital text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Selecione seu Convênio</h2>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-4">
+                        <button onclick="selecionarConvenio('unimed')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-hospital text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold">Unimed</h3>
+                                    <p class="text-gray-600">Cooperativa médica</p>
+                                </div>
+                            </div>
+                        </button>
+                        
+                        <button onclick="selecionarConvenio('particular')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-credit-card text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold">Particular</h3>
+                                    <p class="text-gray-600">Pagamento próprio</p>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 5: CARTEIRINHA (Unimed) -->
+        <div id="screen-carteirinha" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-id-badge text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture sua Carteirinha</h2>
+                        <p class="text-gray-600">Posicione a carteirinha do convênio na frente da câmera</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-xl overflow-hidden">
+                            <video id="video-carteirinha" class="w-full h-full object-cover" autoplay playsinline></video>
+                            <canvas id="canvas-carteirinha" class="hidden"></canvas>
+                            <div id="preview-carteirinha" class="hidden absolute inset-0 flex items-center justify-center bg-black">
+                                <img id="img-carteirinha" class="max-w-full max-h-full">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- DEBUG OCR Carteirinha -->
+                    <div id="debug-carteirinha" class="hidden mb-8 bg-blue-50 border-2 border-blue-400 rounded-xl p-6">
+                        <h3 class="text-xl font-bold text-blue-900 mb-4">
+                            <i class="fas fa-bug mr-2"></i>
+                            Debug - Número da Carteirinha
+                        </h3>
+                        <div class="bg-white p-4 rounded-lg">
+                            <p class="text-sm font-bold text-gray-700 mb-2">Texto Capturado:</p>
+                            <pre id="texto-carteirinha" class="text-sm text-gray-800 whitespace-pre-wrap max-h-48 overflow-y-auto"></pre>
+                        </div>
+                        <div id="numero-extraido" class="hidden mt-4 p-3 bg-green-100 rounded-lg">
+                            <span class="font-bold text-green-900">Número Identificado: </span>
+                            <span id="numero-valor" class="text-green-700 font-mono text-lg"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="voltarConvenio()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar
+                        </button>
+                        <button id="btn-capturar-carteirinha" onclick="capturarCarteirinha()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>Capturar
+                        </button>
+                        <button id="btn-confirmar-carteirinha" onclick="confirmarCarteirinha()" class="hidden bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            Confirmar <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 6: REQUISIÇÕES MÉDICAS -->
+        <div id="screen-requisicoes" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-file-medical text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture as Requisições Médicas</h2>
+                        <p class="text-gray-600">Posicione as requisições na frente da câmera</p>
+                        <p class="text-sm text-gray-500 mt-2">Você pode capturar múltiplas requisições</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-xl overflow-hidden">
+                            <video id="video-requisicao" class="w-full h-full object-cover" autoplay playsinline></video>
+                            <canvas id="canvas-requisicao" class="hidden"></canvas>
+                            <div id="preview-requisicao" class="hidden absolute inset-0 flex items-center justify-center bg-black">
+                                <img id="img-requisicao" class="max-w-full max-h-full">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Requisições capturadas -->
+                    <div id="requisicoes-capturadas" class="mb-8 hidden">
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">Requisições Capturadas:</h3>
+                        <div id="lista-requisicoes" class="space-y-4"></div>
+                    </div>
+                    
+                    <!-- DEBUG OCR Requisições -->
+                    <div id="debug-requisicao" class="hidden mb-8 bg-purple-50 border-2 border-purple-400 rounded-xl p-6">
+                        <h3 class="text-xl font-bold text-purple-900 mb-4">
+                            <i class="fas fa-bug mr-2"></i>
+                            Debug - Dados Extraídos
+                        </h3>
+                        <div class="bg-white p-4 rounded-lg mb-3">
+                            <p class="text-sm font-bold text-gray-700 mb-2">Texto Capturado:</p>
+                            <pre id="texto-requisicao" class="text-sm text-gray-800 whitespace-pre-wrap max-h-48 overflow-y-auto"></pre>
+                        </div>
+                        <div id="exames-extraidos" class="hidden p-3 bg-green-100 rounded-lg">
+                            <p class="font-bold text-green-900 mb-2">Dados Identificados:</p>
+                            <div id="dados-requisicao" class="text-sm text-gray-800"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="voltarConvenioOuCarteirinha()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar
+                        </button>
+                        <button id="btn-capturar-requisicao" onclick="capturarRequisicao()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>Capturar
+                        </button>
+                        <button id="btn-adicionar-requisicao" onclick="adicionarRequisicao()" class="hidden bg-yellow-600 hover:bg-yellow-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-plus mr-2"></i>Adicionar Mais
+                        </button>
+                        <button id="btn-finalizar-requisicoes" onclick="finalizarRequisicoes()" class="hidden bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            Finalizar <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 7: CONFIRMAR EXAMES -->
+        <div id="screen-confirmar-exames" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2 text-center">
+                        <i class="fas fa-clipboard-check mr-2 text-green-600"></i>
+                        Confirme os Exames
+                    </h2>
+                    <p class="text-gray-600 text-center mb-6">Revise os exames identificados e faça ajustes se necessário</p>
+                    
+                    <!-- Lista de exames confirmados -->
+                    <div class="mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">Exames Identificados:</h3>
+                        <div id="lista-exames-confirmar" class="space-y-2">
+                            <!-- Exames serão inseridos aqui via JS -->
+                        </div>
+                        <div id="nenhum-exame-msg" class="hidden text-center py-8 text-gray-500">
+                            <i class="fas fa-exclamation-circle text-4xl mb-2"></i>
+                            <p>Nenhum exame identificado. Adicione manualmente abaixo.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Adicionar exame manual -->
+                    <div class="border-t pt-6 mb-6">
+                        <h3 class="text-xl font-bold text-gray-800 mb-3">Adicionar Exame Manual:</h3>
+                        <div class="flex gap-3">
+                            <input type="text" 
+                                   id="input-busca-exame" 
+                                   placeholder="Digite o nome do exame..."
+                                   class="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:outline-none text-lg"
+                                   onkeyup="buscarExamesInteligente(event)">
+                            <button onclick="adicionarExameManual()" 
+                                    class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg totem-btn">
+                                <i class="fas fa-plus mr-2"></i>Adicionar
+                            </button>
+                        </div>
+                        
+                        <!-- Sugestões de exames -->
+                        <div id="sugestoes-exames" class="hidden mt-3 bg-gray-50 border-2 border-gray-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                            <p class="text-sm font-bold text-gray-700 mb-2">Sugestões:</p>
+                            <div id="lista-sugestoes" class="space-y-1">
+                                <!-- Sugestões serão inseridas aqui -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-4 justify-center pt-4">
+                        <button onclick="voltarRequisicoes()" 
+                                class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar
+                        </button>
+                        <button onclick="confirmarExamesFinais()" 
+                                class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-check mr-2"></i>Confirmar Exames
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 8: SELECIONAR MÉDICO -->
+        <div id="screen-selecionar-medico" class="hidden fade-in">
+            <div class="max-w-3xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2 text-center">
+                        <i class="fas fa-user-md mr-2 text-blue-600"></i>
+                        Selecione o Médico
+                    </h2>
+                    <p class="text-gray-600 text-center mb-6" id="medico-instrucao">
+                        Encontramos múltiplos médicos. Selecione o correto:
+                    </p>
+                    
+                    <!-- Dados extraídos do OCR -->
+                    <div class="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+                        <p class="text-sm font-bold text-blue-900 mb-2">Dados da Requisição:</p>
+                        <div id="medico-ocr-dados" class="text-sm text-gray-800">
+                            <!-- Dados do OCR serão inseridos aqui -->
+                        </div>
+                    </div>
+                    
+                    <!-- Lista de médicos encontrados -->
+                    <div id="lista-medicos-encontrados" class="space-y-3 mb-6">
+                        <!-- Médicos serão inseridos aqui via JS -->
+                    </div>
+                    
+                    <!-- Busca manual de médico -->
+                    <div class="border-t pt-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-3">Ou busque manualmente:</h3>
+                        <div class="grid grid-cols-3 gap-3 mb-3">
+                            <input type="text" 
+                                   id="input-busca-medico-nome" 
+                                   placeholder="Nome do médico..."
+                                   class="col-span-2 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
+                            <input type="text" 
+                                   id="input-busca-medico-crm" 
+                                   placeholder="CRM..."
+                                   class="px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div class="flex gap-3">
+                            <select id="input-busca-medico-uf" 
+                                    class="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none">
+                                <option value="">Selecione UF...</option>
+                                <option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option>
+                                <option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option>
+                                <option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option>
+                                <option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option>
+                                <option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option>
+                                <option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option>
+                                <option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option>
+                                <option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option>
+                                <option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option>
+                            </select>
+                            <button onclick="buscarMedicoManual()" 
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg totem-btn">
+                                <i class="fas fa-search mr-2"></i>Buscar
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-4 justify-center pt-6">
+                        <button onclick="voltarConfirmarExames()" 
+                                class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>Voltar
+                        </button>
+                        <button onclick="continuarSemMedico()" 
+                                class="bg-yellow-600 hover:bg-yellow-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-forward mr-2"></i>Continuar Sem Médico
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA 9: SUCESSO -->
+        <div id="screen-sucesso" class="hidden fade-in">
+            <div class="max-w-xl mx-auto text-center">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <i class="fas fa-check-circle text-8xl text-green-500 mb-6"></i>
+                    <h2 class="text-4xl font-bold text-gray-900 mb-4">Atendimento Registrado!</h2>
+                    <p class="text-gray-600 mb-6">Seu protocolo:</p>
+                    <div class="bg-gray-100 p-6 rounded-lg mb-8">
+                        <span id="protocolo" class="text-3xl font-mono font-bold text-green-600"></span>
+                    </div>
+                    <button onclick="voltarInicio()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                        <i class="fas fa-home mr-2"></i>Novo Atendimento
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Loading -->
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 text-center">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-green-500 mx-auto mb-4"></div>
+            <p id="loading-text" class="text-gray-800 font-bold text-xl">Processando...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        
+        let cameraStream = null;
+        let dadosCliente = null;
+        let dadosDocumento = null;
+        let convenioSelecionado = null;
+        let requisicoesCapturadas = [];
+        let requisicaoAtual = null;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('✅ Página carregada!');
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+        });
+
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('pt-BR', { hour12: false });
+            document.getElementById('current-date').textContent = now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        function mostrarTela(tela) {
+            console.log('📺 Mudando para tela:', tela);
+            ['welcome', 'documento', 'confirmacao', 'convenio', 'carteirinha', 'requisicoes', 'sucesso'].forEach(id => {
+                const el = document.getElementById('screen-' + id);
+                if (el) el.classList.add('hidden');
+            });
+            
+            const novaTela = document.getElementById('screen-' + tela);
+            if (novaTela) {
+                novaTela.classList.remove('hidden');
+                document.getElementById('debug-tela').textContent = tela;
+            }
+        }
+
+        function showLoading(text = 'Processando...') {
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        // FLUXO PRINCIPAL
+        async function iniciarAtendimento() {
+            console.log('🚀 Iniciando atendimento...');
+            mostrarTela('documento');
+            
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+                document.getElementById('video-documento').srcObject = cameraStream;
+                console.log('✅ Câmera ativada!');
+            } catch (err) {
+                console.error('❌ Erro câmera:', err);
+                alert('Permita o acesso à câmera ou use o Modo Teste.');
+                voltarInicio();
+            }
+        }
+
+        async function iniciarTesteSemCamera() {
+            console.log('🧪 MODO TESTE - Buscando CPF no banco...');
+            showLoading('Buscando cliente no banco de dados...');
+            
+            // Criar imagem de teste
+            dadosDocumento = { 
+                imagem: createTestImage(), 
+                cpf: '01398373451' 
+            };
+            
+            try {
+                // Buscar cliente real no banco de dados
+                await buscarCliente({ cpf: '01398373451' });
+            } catch (err) {
+                console.error('❌ Erro ao buscar cliente:', err);
+                hideLoading();
+                alert('Erro ao buscar cliente: ' + err.message);
+                voltarInicio();
+            }
+        }
+
+        function createTestImage() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, 640, 480);
+            ctx.fillStyle = '#000';
+            ctx.font = '20px Arial';
+            ctx.fillText('CPF: 013.983.734-51', 200, 150);
+            return canvas.toDataURL('image/jpeg');
+        }
+
+        async function capturarDocumento() {
+            console.log('📸 Capturando documento...');
+            const video = document.getElementById('video-documento');
+            const canvas = document.getElementById('canvas-documento');
+            const preview = document.getElementById('preview-documento');
+            const img = document.getElementById('img-documento');
+            
+            if (!video.srcObject) {
+                // Modo teste
+                canvas.width = 640;
+                canvas.height = 480;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, 640, 480);
+                ctx.fillStyle = '#000';
+                ctx.font = '20px Arial';
+                ctx.fillText('TESTE - CPF: 013.983.734-51', 150, 240);
+            } else {
+                // Capturar imagem original
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+            }
+            
+            // Salvar imagem original para preview
+            const imagemOriginal = canvas.toDataURL('image/jpeg', 0.95);
+            img.src = imagemOriginal;
+            dadosDocumento = { imagem: imagemOriginal };
+            
+            video.classList.add('hidden');
+            preview.classList.remove('hidden');
+            document.getElementById('btn-capturar-doc').classList.add('hidden');
+            document.getElementById('btn-confirmar-doc').classList.remove('hidden');
+        }
+
+        async function confirmarDocumento() {
+            showLoading('Processando imagem com Google Vision...');
+            
+            try {
+                const canvas = document.getElementById('canvas-documento');
+                
+                // Obter imagem em base64
+                const imagemBase64 = canvas.toDataURL('image/jpeg', 0.95);
+                
+                showLoading('Extraindo dados (Google Vision OCR)...');
+                
+                // Chamar API do Google Vision via backend
+                const response = await fetch('http://localhost:3000/api/ocr/google-vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imagemBase64 })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Erro ao processar OCR');
+                }
+                
+                const resultado = await response.json();
+                
+                if (!resultado.sucesso) {
+                    throw new Error(resultado.erro || 'Erro desconhecido');
+                }
+                
+                const textoOCR = resultado.texto || '';
+                const confianca = resultado.confianca || 0;
+                
+                console.log('🎯 Confiança Google Vision:', confianca.toFixed(1) + '%');
+                console.log('📝 Texto extraído:', textoOCR);
+                
+                // Limpar e normalizar texto
+                const textoLimpo = textoOCR
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9\s\-\.]/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                
+                console.log('✨ Texto limpo:', textoLimpo);
+                
+                // Mostrar debug
+                document.getElementById('texto-ocr').textContent = 
+                    '=== GOOGLE VISION ===\n' + textoOCR + 
+                    '\n\n=== LIMPO ===\n' + textoLimpo +
+                    '\n\n=== CONFIANÇA ===\n' + confianca.toFixed(1) + '%';
+                document.getElementById('debug-ocr').classList.remove('hidden');
+                
+                // Extrair CPF ou RG
+                let cpf = extrairCPF(textoLimpo);
+                let rg = null;
+                
+                if (!cpf) {
+                    console.log('⚠️ Tentando texto original...');
+                    cpf = extrairCPF(textoOCR);
+                }
+                
+                if (!cpf) {
+                    console.log('⚠️ Tentando RG...');
+                    rg = extrairRG(textoLimpo);
+                    console.log('🆔 RG encontrado:', rg);
+                }
+                
+                console.log('🆔 CPF final:', cpf);
+                
+                if (cpf) {
+                    document.getElementById('cpf-valor').textContent = 'CPF: ' + formatarCPF(cpf);
+                    document.getElementById('cpf-extraido').classList.remove('hidden');
+                    dadosDocumento.cpf = cpf;
+                    await buscarCliente({ cpf });
+                } else if (rg) {
+                    document.getElementById('cpf-valor').textContent = 'RG: ' + rg;
+                    document.getElementById('cpf-extraido').classList.remove('hidden');
+                    dadosDocumento.rg = rg;
+                    await buscarCliente({ rg });
+                } else {
+                    hideLoading();
+                    alert('❌ CPF/RG não encontrado!\n\nDicas:\n• Melhore a iluminação\n• Posicione documento reto\n• Afaste ou aproxime a câmera');
+                    voltarDocumento();
+                }
+            } catch (err) {
+                console.error('❌ Erro:', err);
+                hideLoading();
+                alert('Erro ao processar OCR: ' + err.message);
+                voltarDocumento();
+            }
+        }
+        
+        function extrairCPF(texto) {
+            console.log('🔍 Buscando CPF no texto...');
+            
+            // Estratégia 1: Procurar padrão "CPF" seguido de números
+            const padraoCPFExplicito = /CPF[:\s\-\.]*([0-9O]{3}[\s\.\-]*[0-9O]{3}[\s\.\-]*[0-9O]{3}[\s\.\-]*[0-9O]{2})/gi;
+            let match = texto.match(padraoCPFExplicito);
+            if (match) {
+                const cpfCandidato = match[0].replace(/[^\dO]/g, '').replace(/O/g, '0');
+                if (cpfCandidato.length === 11) {
+                    console.log('✅ CPF encontrado (estratégia 1):', cpfCandidato);
+                    return cpfCandidato;
+                }
+            }
+            
+            // Estratégia 2: Buscar padrão XXX.XXX.XXX-XX ou variações
+            const padraoFormatado = /(\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{2})/g;
+            const matches = [...texto.matchAll(padraoFormatado)];
+            
+            for (const m of matches) {
+                const cpfCandidato = m[0].replace(/\D/g, '');
+                if (cpfCandidato.length === 11 && !cpfCandidato.startsWith('0')) {
+                    console.log('✅ CPF encontrado (estratégia 2):', cpfCandidato);
+                    return cpfCandidato;
+                }
+            }
+            
+            // Estratégia 3: Extrair todas as sequências de dígitos
+            const numeros = texto.match(/\d+/g);
+            if (numeros) {
+                // Procurar sequência de exatamente 11 dígitos
+                for (const num of numeros) {
+                    if (num.length === 11 && !num.startsWith('0') && !num.startsWith('11111')) {
+                        console.log('✅ CPF encontrado (estratégia 3):', num);
+                        return num;
+                    }
+                }
+                
+                // Tentar combinar números adjacentes
+                const todosDigitos = numeros.join('');
+                if (todosDigitos.length >= 11) {
+                    // Procurar janela deslizante de 11 dígitos
+                    for (let i = 0; i <= todosDigitos.length - 11; i++) {
+                        const possivel = todosDigitos.substring(i, i + 11);
+                        if (!possivel.startsWith('0') && !possivel.startsWith('11111')) {
+                            console.log('✅ CPF encontrado (estratégia 4):', possivel);
+                            return possivel;
+                        }
+                    }
+                }
+            }
+            
+            // Estratégia 5: Buscar em linhas específicas que contenham "CPF"
+            const linhas = texto.split('\n');
+            for (const linha of linhas) {
+                if (linha.toUpperCase().includes('CPF')) {
+                    const digitos = linha.replace(/[^\d]/g, '');
+                    if (digitos.length >= 11) {
+                        const cpf = digitos.substring(0, 11);
+                        if (!cpf.startsWith('0')) {
+                            console.log('✅ CPF encontrado (estratégia 5):', cpf);
+                            return cpf;
+                        }
+                    }
+                }
+            }
+            
+            console.log('❌ CPF não encontrado em nenhuma estratégia');
+            return null;
+        }
+        
+        function extrairRG(texto) {
+            const padroes = [
+                /RG[:\s]+(\d{1,2}[\s\.]?\d{3}[\s\.]?\d{3}[\s\-]?\d{1,2})/gi,
+                /REGISTRO[:\s]+(\d{7,12})/gi,
+                /IDENTIDADE[:\s]+(\d{7,12})/gi
+            ];
+            
+            for (const padrao of padroes) {
+                const match = texto.match(padrao);
+                if (match) {
+                    const rg = match[0].replace(/\D/g, '');
+                    if (rg.length >= 7 && rg.length <= 12) {
+                        return rg;
+                    }
+                }
+            }
+            
+            return null;
+        }
+        
+        async function buscarCliente(dados) {
+            try {
+                const response = await fetch(`${API_URL}/totem/processar-documento`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        dados_ocr: dados, 
+                        imagem_base64: dadosDocumento.imagem  
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.clienteEncontrado) {
+                    dadosCliente = data.cliente;
+                    hideLoading();
+                    mostrarConfirmacao();
+                } else {
+                    hideLoading();
+                    alert('❌ Cliente não encontrado.\n\nDirija-se ao balcão.');
+                    voltarInicio();
+                }
+            } catch (err) {
+                hideLoading();
+                throw err;
+            }
+        }
+
+        function mostrarConfirmacao() {
+            const container = document.getElementById('dados-cliente');
+            container.innerHTML = `
+                <div class="text-lg"><b>Nome:</b> ${dadosCliente.nome || 'N/A'}</div>
+                <div class="text-lg"><b>CPF:</b> ${formatarCPF(dadosCliente.cpf || '')}</div>
+                <div class="text-lg"><b>Data Nasc:</b> ${dadosCliente.data_nascimento || 'N/A'}</div>
+                <div class="text-lg"><b>Telefone:</b> ${dadosCliente.celular || 'N/A'}</div>
+                <div class="text-lg"><b>Endereço:</b> ${dadosCliente.endereco || 'N/A'}</div>
+            `;
+            pararCamera();
+            mostrarTela('confirmacao');
+        }
+
+        function formatarCPF(cpf) {
+            return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        }
+
+        function confirmarCliente() {
+            mostrarTela('convenio');
+        }
+
+        async function selecionarConvenio(tipo) {
+            convenioSelecionado = tipo;
+            console.log('🏥 Convênio selecionado:', tipo);
+            
+            // Dependendo do convênio, vai para tela diferente
+            if (tipo === 'unimed') {
+                // Unimed precisa capturar carteirinha primeiro
+                await iniciarCameraCarteirinha();
+                mostrarTela('carteirinha');
+            } else {
+                // Particular vai direto para requisições
+                await iniciarCameraRequisicoes();
+                mostrarTela('requisicoes');
+            }
+        }
+
+        // === CARTEIRINHA (UNIMED) ===
+
+        async function iniciarCameraCarteirinha() {
+            try {
+                if (!cameraStream) {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+                }
+                document.getElementById('video-carteirinha').srcObject = cameraStream;
+                console.log('✅ Câmera carteirinha ativada!');
+            } catch (err) {
+                console.error('❌ Erro câmera carteirinha:', err);
+                alert('Erro ao ativar câmera');
+            }
+        }
+
+        function capturarCarteirinha() {
+            const video = document.getElementById('video-carteirinha');
+            const canvas = document.getElementById('canvas-carteirinha');
+            const img = document.getElementById('img-carteirinha');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const imagemBase64 = canvas.toDataURL('image/jpeg', 0.95);
+            img.src = imagemBase64;
+            
+            // Salvar imagem
+            if (!dadosCliente.carteirinha) dadosCliente.carteirinha = {};
+            dadosCliente.carteirinha.imagem = imagemBase64;
+            
+            // Mostrar preview
+            document.getElementById('video-carteirinha').classList.add('hidden');
+            document.getElementById('preview-carteirinha').classList.remove('hidden');
+            document.getElementById('btn-capturar-carteirinha').classList.add('hidden');
+            document.getElementById('btn-confirmar-carteirinha').classList.remove('hidden');
+            
+            console.log('📸 Carteirinha capturada!');
+        }
+
+        async function confirmarCarteirinha() {
+            showLoading('Processando carteirinha com OCR...');
+            
+            try {
+                // Enviar para OCR Google Vision
+                const response = await fetch('http://localhost:3000/api/ocr/google-vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imagem: dadosCliente.carteirinha.imagem })
+                });
+                
+                const resultado = await response.json();
+                
+                // Mostrar debug
+                document.getElementById('texto-carteirinha').textContent = resultado.texto;
+                document.getElementById('debug-carteirinha').classList.remove('hidden');
+                
+                // Extrair número da carteirinha (buscar padrão numérico)
+                const numeroCarteirinha = extrairNumeroCarteirinha(resultado.texto);
+                
+                if (numeroCarteirinha) {
+                    dadosCliente.carteirinha.numero = numeroCarteirinha;
+                    document.getElementById('numero-valor').textContent = numeroCarteirinha;
+                    document.getElementById('numero-extraido').classList.remove('hidden');
+                    
+                    hideLoading();
+                    
+                    // Aguardar 2 segundos e ir para requisições
+                    setTimeout(async () => {
+                        await iniciarCameraRequisicoes();
+                        mostrarTela('requisicoes');
+                    }, 2000);
+                } else {
+                    hideLoading();
+                    alert('Não foi possível identificar o número da carteirinha. Tente novamente com melhor iluminação.');
+                    recapturarCarteirinha();
+                }
+                
+            } catch (erro) {
+                hideLoading();
+                console.error('❌ Erro OCR carteirinha:', erro);
+                alert('Erro ao processar carteirinha: ' + erro.message);
+            }
+        }
+
+        function extrairNumeroCarteirinha(texto) {
+            // Buscar padrões comuns de número de carteirinha
+            // Exemplo: 12345678901234 (14 dígitos) ou similar
+            const padroes = [
+                /\b\d{14,20}\b/,  // 14-20 dígitos consecutivos
+                /(?:CART|CARTEIRA|N[ºO°])[\s:]*([\d\s-]+)/i,  // "Carteira: 1234..."
+                /(?:MATRICULA|MATRÍCULA)[\s:]*([\d\s-]+)/i    // "Matrícula: 1234..."
+            ];
+            
+            for (const padrao of padroes) {
+                const match = texto.match(padrao);
+                if (match) {
+                    const numero = match[1] ? match[1].replace(/\s|-/g, '') : match[0];
+                    if (numero.length >= 10) {
+                        return numero;
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        function recapturarCarteirinha() {
+            document.getElementById('video-carteirinha').classList.remove('hidden');
+            document.getElementById('preview-carteirinha').classList.add('hidden');
+            document.getElementById('btn-capturar-carteirinha').classList.remove('hidden');
+            document.getElementById('btn-confirmar-carteirinha').classList.add('hidden');
+            document.getElementById('debug-carteirinha').classList.add('hidden');
+        }
+
+        function voltarConvenio() {
+            pararCamera();
+            recapturarCarteirinha();
+            mostrarTela('convenio');
+        }
+
+        // === REQUISIÇÕES MÉDICAS ===
+
+        async function iniciarCameraRequisicoes() {
+            try {
+                if (!cameraStream) {
+                    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+                }
+                document.getElementById('video-requisicao').srcObject = cameraStream;
+                console.log('✅ Câmera requisições ativada!');
+            } catch (err) {
+                console.error('❌ Erro câmera requisições:', err);
+                alert('Erro ao ativar câmera');
+            }
+        }
+
+        function capturarRequisicao() {
+            const video = document.getElementById('video-requisicao');
+            const canvas = document.getElementById('canvas-requisicao');
+            const img = document.getElementById('img-requisicao');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const imagemBase64 = canvas.toDataURL('image/jpeg', 0.95);
+            img.src = imagemBase64;
+            
+            requisicaoAtual = { imagem: imagemBase64 };
+            
+            // Mostrar preview
+            document.getElementById('video-requisicao').classList.add('hidden');
+            document.getElementById('preview-requisicao').classList.remove('hidden');
+            document.getElementById('btn-capturar-requisicao').classList.add('hidden');
+            
+            console.log('📸 Requisição capturada!');
+            
+            // Processar automaticamente
+            processarRequisicao();
+        }
+
+        async function processarRequisicao() {
+            showLoading('Processando requisição com OCR...');
+            
+            try {
+                // Enviar para OCR Google Vision
+                const response = await fetch('http://localhost:3000/api/ocr/google-vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imagem: requisicaoAtual.imagem })
+                });
+                
+                const resultado = await response.json();
+                
+                // Mostrar debug
+                document.getElementById('texto-requisicao').textContent = resultado.texto;
+                document.getElementById('debug-requisicao').classList.remove('hidden');
+                
+                // Extrair dados da requisição
+                const dadosExtraidos = extrairDadosRequisicao(resultado.texto);
+                requisicaoAtual.dados = dadosExtraidos;
+                
+                // Mostrar dados extraídos
+                const html = `
+                    <p><b>Exames:</b> ${dadosExtraidos.exames.join(', ') || 'Não identificado'}</p>
+                    <p><b>Data:</b> ${dadosExtraidos.data || 'Não identificada'}</p>
+                    <p><b>Médico:</b> ${dadosExtraidos.medico || 'Não identificado'}</p>
+                    <p><b>CRM:</b> ${dadosExtraidos.crm || 'Não identificado'}</p>
+                `;
+                document.getElementById('dados-requisicao').innerHTML = html;
+                document.getElementById('exames-extraidos').classList.remove('hidden');
+                
+                hideLoading();
+                
+                // Mostrar botões de adicionar mais ou finalizar
+                document.getElementById('btn-adicionar-requisicao').classList.remove('hidden');
+                document.getElementById('btn-finalizar-requisicoes').classList.remove('hidden');
+                
+            } catch (erro) {
+                hideLoading();
+                console.error('❌ Erro OCR requisição:', erro);
+                alert('Erro ao processar requisição: ' + erro.message);
+            }
+        }
+
+        function extrairDadosRequisicao(texto) {
+            const dados = {
+                exames: [],
+                data: null,
+                medico: null,
+                crm: null
+            };
+            
+            // Extrair data (DD/MM/YYYY ou DD/MM/AA)
+            const matchData = texto.match(/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/);
+            if (matchData) {
+                dados.data = matchData[0];
+            }
+            
+            // Extrair CRM
+            const matchCRM = texto.match(/CRM[\s:-]*([\d\.]+)(?:[\s\/]*(\w{2}))?/i);
+            if (matchCRM) {
+                dados.crm = matchCRM[0].trim();
+            }
+            
+            // Extrair nome do médico (geralmente acima do CRM)
+            const linhas = texto.split('\n');
+            for (let i = 0; i < linhas.length; i++) {
+                if (/CRM/i.test(linhas[i]) && i > 0) {
+                    // Pegar linha anterior que pode ser o nome do médico
+                    const linhaAnterior = linhas[i - 1].trim();
+                    if (linhaAnterior.length > 5 && /^[A-Z\s\.]+$/i.test(linhaAnterior)) {
+                        dados.medico = linhaAnterior;
+                        break;
+                    }
+                }
+            }
+            
+            // Extrair exames (normalizar com sinônimos)
+            dados.exames = extrairExames(texto);
+            
+            return dados;
+        }
+
+        function extrairExames(texto) {
+            const exames = [];
+            const textoNormalizado = texto.toUpperCase();
+            
+            // Dicionário de sinônimos de exames
+            const sinonimosExames = {
+                'GLICOSE': ['GLICOSE', 'GLI', 'GLICEMIA', 'G'],
+                'HEMOGLOBINA GLICADA': ['HEMOGLOBINA GLICADA', 'HBGL', 'A1C', 'HBA1C', 'GLICADA'],
+                'HEMOGRAMA': ['HEMOGRAMA', 'HMG', 'HEMOGRAMA COMPLETO'],
+                'COLESTEROL': ['COLESTEROL', 'COL', 'COLESTEROL TOTAL'],
+                'TRIGLICERIDES': ['TRIGLICERIDES', 'TRIGLICÉRIDES', 'TGL', 'TRIG'],
+                'UREIA': ['UREIA', 'URE'],
+                'CREATININA': ['CREATININA', 'CREA', 'CREAT'],
+                'TSH': ['TSH', 'TIREOESTIMULANTE'],
+                'T4 LIVRE': ['T4 LIVRE', 'T4L', 'T4'],
+                'PSA': ['PSA', 'ANTÍGENO PROSTÁTICO', 'ANTIGENO PROSTATICO'],
+                'ÁCIDO ÚRICO': ['ÁCIDO ÚRICO', 'ACIDO URICO', 'AU'],
+                'TGO': ['TGO', 'AST', 'ASPARTATO'],
+                'TGP': ['TGP', 'ALT', 'ALANINA'],
+                'GAMA GT': ['GAMA GT', 'GGT', 'GAMA-GT'],
+            };
+            
+            // Buscar cada exame e seus sinônimos
+            for (const [nomeExame, sinonimos] of Object.entries(sinonimosExames)) {
+                for (const sinonimo of sinonimos) {
+                    if (textoNormalizado.includes(sinonimo)) {
+                        if (!exames.includes(nomeExame)) {
+                            exames.push(nomeExame);
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            return exames;
+        }
+
+        function adicionarRequisicao() {
+            // Adicionar requisição atual à lista
+            requisicoesCapturadas.push(requisicaoAtual);
+            
+            // Atualizar lista visual
+            atualizarListaRequisicoes();
+            
+            // Resetar para nova captura
+            requisicaoAtual = null;
+            document.getElementById('video-requisicao').classList.remove('hidden');
+            document.getElementById('preview-requisicao').classList.add('hidden');
+            document.getElementById('btn-capturar-requisicao').classList.remove('hidden');
+            document.getElementById('btn-adicionar-requisicao').classList.add('hidden');
+            document.getElementById('btn-finalizar-requisicoes').classList.add('hidden');
+            document.getElementById('debug-requisicao').classList.add('hidden');
+            
+            console.log(`✅ Requisição adicionada! Total: ${requisicoesCapturadas.length}`);
+        }
+
+        function atualizarListaRequisicoes() {
+            const container = document.getElementById('lista-requisicoes');
+            const wrapper = document.getElementById('requisicoes-capturadas');
+            
+            wrapper.classList.remove('hidden');
+            
+            container.innerHTML = requisicoesCapturadas.map((req, index) => `
+                <div class="bg-gray-100 p-4 rounded-lg">
+                    <h4 class="font-bold text-gray-900 mb-2">Requisição ${index + 1}</h4>
+                    <p class="text-sm"><b>Exames:</b> ${req.dados.exames.join(', ')}</p>
+                    <p class="text-sm"><b>Data:</b> ${req.dados.data || 'N/A'}</p>
+                    <p class="text-sm"><b>Médico:</b> ${req.dados.medico || 'N/A'}</p>
+                    <p class="text-sm"><b>CRM:</b> ${req.dados.crm || 'N/A'}</p>
+                </div>
+            `).join('');
+        }
+
+        async function finalizarRequisicoes() {
+            // Adicionar requisição atual se houver
+            if (requisicaoAtual) {
+                requisicoesCapturadas.push(requisicaoAtual);
+            }
+            
+            if (requisicoesCapturadas.length === 0) {
+                alert('Capture pelo menos uma requisição!');
+                return;
+            }
+            
+            // Ir para tela de confirmação de exames
+            await prepararTelaConfirmarExames();
+        }
+
+        async function salvarAtendimentoCompleto() {
+            showLoading('Salvando atendimento...');
+            
+            try {
+                const response = await fetch(`${API_URL}/totem/salvar-atendimento`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        paciente: {
+                            codigo_cliente: dadosCliente.codigo_cliente,
+                            cpf: dadosCliente.cpf,
+                            nome_completo: dadosCliente.nome,
+                            data_nascimento: dadosCliente.data_nascimento,
+                            telefone: dadosCliente.celular,
+                            endereco: dadosCliente.endereco
+                        },
+                        convenio: convenioSelecionado,
+                        carteirinha: dadosCliente.carteirinha,
+                        requisicoes: requisicoesCapturadas,
+                        imagem_documento: dadosDocumento.imagem,
+                        cliente_confirmado: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.protocolo) {
+                    document.getElementById('protocolo').textContent = data.protocolo;
+                    mostrarTela('sucesso');
+                    setTimeout(voltarInicio, 30000);
+                }
+            } catch (err) {
+                alert('Erro: ' + err.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function pararCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+        }
+
+        function voltarConvenioOuCarteirinha() {
+            // Se for Unimed, volta para carteirinha, senão volta para convênio
+            if (convenioSelecionado === 'unimed') {
+                mostrarTela('carteirinha');
+            } else {
+                mostrarTela('convenio');
+            }
+        }
+
+        function voltarInicio() {
+            pararCamera();
+            dadosCliente = null;
+            dadosDocumento = null;
+            convenioSelecionado = null;
+            requisicoesCapturadas = [];
+            requisicaoAtual = null;
+            document.getElementById('video-documento').classList.remove('hidden');
+            document.getElementById('preview-documento').classList.add('hidden');
+            document.getElementById('btn-capturar-doc').classList.remove('hidden');
+            document.getElementById('btn-confirmar-doc').classList.add('hidden');
+            document.getElementById('debug-ocr').classList.add('hidden');
+            mostrarTela('welcome');
+        }
+
+        function voltarDocumento() {
+            document.getElementById('video-documento').classList.remove('hidden');
+            document.getElementById('preview-documento').classList.add('hidden');
+            document.getElementById('btn-capturar-doc').classList.remove('hidden');
+            document.getElementById('btn-confirmar-doc').classList.add('hidden');
+            document.getElementById('debug-ocr').classList.add('hidden');
+        }
+
+        // ============================================
+        // TELA DE CONFIRMAÇÃO DE EXAMES
+        // ============================================
+
+        let examesConfirmados = [];
+        let todosExamesDisponiveis = [];
+
+        async function prepararTelaConfirmarExames() {
+            showLoading('Validando exames...');
+            
+            // Coletar todos os exames de todas as requisições
+            const todosExames = [];
+            for (const req of requisicoesCapturadas) {
+                for (const exameTexto of req.dados.exames) {
+                    // Buscar exame no backend usando busca inteligente
+                    const resultado = await buscarExameInteligente(exameTexto);
+                    todosExames.push({
+                        textoOcr: exameTexto,
+                        exame: resultado.exame,
+                        score: resultado.score,
+                        matchTipo: resultado.matchTipo,
+                        selecionado: true
+                    });
+                }
+            }
+            
+            examesConfirmados = todosExames;
+            renderizarListaExames();
+            mostrarTela('confirmar-exames');
+            hideLoading();
+        }
+
+        async function buscarExameInteligente(textoOcr) {
+            try {
+                const response = await fetch(`${API_URL}/totem/exames/buscar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ textoOcr, limit: 1 })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.exames.length > 0) {
+                    const match = data.exames[0];
+                    return {
+                        exame: match.exame,
+                        score: match.score,
+                        matchTipo: match.matchTipo
+                    };
+                }
+                
+                // Se não encontrou, retornar sugestão
+                return {
+                    exame: null,
+                    score: 0,
+                    matchTipo: 'NAO_ENCONTRADO'
+                };
+            } catch (erro) {
+                console.error('Erro ao buscar exame:', erro);
+                return {
+                    exame: null,
+                    score: 0,
+                    matchTipo: 'ERRO'
+                };
+            }
+        }
+
+        function renderizarListaExames() {
+            const container = document.getElementById('lista-exames-confirmar');
+            const msgVazio = document.getElementById('nenhum-exame-msg');
+            
+            const examesSelecionados = examesConfirmados.filter(e => e.selecionado);
+            
+            if (examesSelecionados.length === 0) {
+                container.innerHTML = '';
+                msgVazio.classList.remove('hidden');
+                return;
+            }
+            
+            msgVazio.classList.add('hidden');
+            
+            container.innerHTML = examesSelecionados.map((item, index) => {
+                const scoreClass = item.score >= 0.9 ? 'bg-green-100 text-green-800' : 
+                                  item.score >= 0.7 ? 'bg-yellow-100 text-yellow-800' : 
+                                  'bg-red-100 text-red-800';
+                
+                const scoreIcon = item.score >= 0.9 ? 'fa-check-circle' : 
+                                 item.score >= 0.7 ? 'fa-exclamation-triangle' : 
+                                 'fa-times-circle';
+                
+                return `
+                    <div class="flex items-center justify-between p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-3">
+                                <i class="fas ${scoreIcon} ${scoreClass.split(' ')[1]} text-xl"></i>
+                                <div>
+                                    <p class="font-bold text-gray-900">
+                                        ${item.exame ? item.exame.nomePadrao : item.textoOcr}
+                                    </p>
+                                    ${item.exame ? `
+                                        <p class="text-sm text-gray-600">
+                                            Código: ${item.exame.codigoInterno || 'N/A'} | 
+                                            TUSS: ${item.exame.codigoTuss || 'N/A'}
+                                        </p>
+                                    ` : `
+                                        <p class="text-sm text-red-600">⚠️ Não encontrado no sistema</p>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${scoreClass}">
+                                ${Math.round(item.score * 100)}% confiança
+                            </span>
+                            <button onclick="removerExame(${index})" 
+                                    class="text-red-600 hover:text-red-800 p-2">
+                                <i class="fas fa-trash text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function removerExame(index) {
+            examesConfirmados[index].selecionado = false;
+            renderizarListaExames();
+        }
+
+        async function buscarExamesInteligente(event) {
+            const input = document.getElementById('input-busca-exame');
+            const query = input.value.trim();
+            
+            if (query.length < 2) {
+                document.getElementById('sugestoes-exames').classList.add('hidden');
+                return;
+            }
+            
+            if (event.key === 'Enter') {
+                await adicionarExameManual();
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/totem/exames/buscar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ textoOcr: query, limit: 5 })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.exames.length > 0) {
+                    mostrarSugestoes(data.exames);
+                } else {
+                    document.getElementById('sugestoes-exames').classList.add('hidden');
+                }
+            } catch (erro) {
+                console.error('Erro ao buscar sugestões:', erro);
+            }
+        }
+
+        function mostrarSugestoes(exames) {
+            const container = document.getElementById('lista-sugestoes');
+            const wrapper = document.getElementById('sugestoes-exames');
+            
+            container.innerHTML = exames.map(item => `
+                <button onclick='selecionarSugestao(${JSON.stringify(item.exame)})' 
+                        class="w-full text-left p-2 hover:bg-gray-200 rounded">
+                    <span class="font-bold">${item.exame.nomePadrao}</span>
+                    <span class="text-sm text-gray-600 ml-2">(${Math.round(item.score * 100)}%)</span>
+                </button>
+            `).join('');
+            
+            wrapper.classList.remove('hidden');
+        }
+
+        function selecionarSugestao(exame) {
+            examesConfirmados.push({
+                textoOcr: exame.nomePadrao,
+                exame: exame,
+                score: 1.0,
+                matchTipo: 'MANUAL',
+                selecionado: true
+            });
+            
+            renderizarListaExames();
+            document.getElementById('input-busca-exame').value = '';
+            document.getElementById('sugestoes-exames').classList.add('hidden');
+        }
+
+        async function adicionarExameManual() {
+            const input = document.getElementById('input-busca-exame');
+            const query = input.value.trim();
+            
+            if (!query) return;
+            
+            const resultado = await buscarExameInteligente(query);
+            
+            if (resultado.exame) {
+                examesConfirmados.push({
+                    textoOcr: query,
+                    exame: resultado.exame,
+                    score: resultado.score,
+                    matchTipo: 'MANUAL',
+                    selecionado: true
+                });
+                
+                renderizarListaExames();
+                input.value = '';
+                document.getElementById('sugestoes-exames').classList.add('hidden');
+            } else {
+                alert(`Exame "${query}" não encontrado no sistema. Tente outro nome.`);
+            }
+        }
+
+        function voltarRequisicoes() {
+            mostrarTela('requisicoes');
+        }
+
+        async function confirmarExamesFinais() {
+            const examesSelecionados = examesConfirmados.filter(e => e.selecionado && e.exame);
+            
+            if (examesSelecionados.length === 0) {
+                alert('Selecione pelo menos um exame válido!');
+                return;
+            }
+            
+            // Verificar se há exames com baixa confiança
+            const exameBaixaConfianca = examesSelecionados.find(e => e.score < 0.7);
+            if (exameBaixaConfianca) {
+                const confirmar = confirm(
+                    `Atenção: Há exames com baixa confiança de identificação.\n\n` +
+                    `Deseja continuar mesmo assim?`
+                );
+                if (!confirmar) return;
+            }
+            
+            // Atualizar requisições com exames confirmados
+            atualizarRequisicoesComExamesConfirmados(examesSelecionados);
+            
+            // Verificar médico antes de salvar
+            await verificarMedicoESalvar();
+        }
+
+        function atualizarRequisicoesComExamesConfirmados(examesSelecionados) {
+            // Consolidar todos os exames em uma única requisição
+            if (requisicoesCapturadas.length > 0) {
+                requisicoesCapturadas[0].dados.exames = examesSelecionados.map(e => e.exame.nomePadrao);
+                requisicoesCapturadas[0].dados.examesDetalhados = examesSelecionados;
+            }
+        }
+
+        // ============================================
+        // TELA DE SELEÇÃO DE MÉDICO
+        // ============================================
+
+        let medicoSelecionado = null;
+        let medicosEncontrados = [];
+
+        async function verificarMedicoESalvar() {
+            // Pegar dados do médico da primeira requisição
+            if (requisicoesCapturadas.length === 0) {
+                await salvarAtendimentoCompleto();
+                return;
+            }
+            
+            const dadosMedico = requisicoesCapturadas[0].dados;
+            
+            if (!dadosMedico.medico && !dadosMedico.crm) {
+                // Sem dados de médico, continuar direto
+                await salvarAtendimentoCompleto();
+                return;
+            }
+            
+            showLoading('Verificando médico...');
+            
+            // Buscar médico no backend
+            const resultados = await buscarMedicoInteligente(
+                dadosMedico.medico,
+                dadosMedico.crm
+            );
+            
+            hideLoading();
+            
+            if (resultados.length === 1 && resultados[0].score >= 0.9) {
+                // Match único com alta confiança
+                medicoSelecionado = resultados[0].medico;
+                await salvarAtendimentoCompleto();
+            } else if (resultados.length > 1 || resultados.length === 0) {
+                // Múltiplos ou nenhum médico encontrado - mostrar tela de seleção
+                medicosEncontrados = resultados;
+                mostrarTelaSelecaoMedico(dadosMedico);
+            } else {
+                // Um médico com baixa confiança
+                const confirmar = confirm(
+                    `Médico identificado com baixa confiança:\n\n` +
+                    `${resultados[0].medico.nome} - CRM ${resultados[0].medico.crm}/${resultados[0].medico.ufCrm}\n\n` +
+                    `Confirma este médico?`
+                );
+                
+                if (confirmar) {
+                    medicoSelecionado = resultados[0].medico;
+                    await salvarAtendimentoCompleto();
+                } else {
+                    medicosEncontrados = resultados;
+                    mostrarTelaSelecaoMedico(dadosMedico);
+                }
+            }
+        }
+
+        async function buscarMedicoInteligente(nome, crm) {
+            try {
+                // Extrair CRM e UF se tiver no formato "CRM 12345/SP"
+                let crmLimpo = null;
+                let ufCrm = null;
+                
+                if (crm) {
+                    const matchCRM = crm.match(/(\d+)[\s\/]*([A-Z]{2})?/);
+                    if (matchCRM) {
+                        crmLimpo = matchCRM[1];
+                        ufCrm = matchCRM[2] || null;
+                    }
+                }
+                
+                const response = await fetch(`${API_URL}/totem/medicos/buscar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        nome: nome || undefined,
+                        crm: crmLimpo || undefined,
+                        uf: ufCrm || undefined,
+                        limit: 10
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.medicos) {
+                    return data.medicos;
+                }
+                
+                return [];
+            } catch (erro) {
+                console.error('Erro ao buscar médico:', erro);
+                return [];
+            }
+        }
+
+        function mostrarTelaSelecaoMedico(dadosMedico) {
+            // Atualizar instrução baseado no contexto
+            const instrucaoEl = document.getElementById('medico-instrucao');
+            if (medicosEncontrados.length === 0) {
+                instrucaoEl.textContent = 'Nenhum médico encontrado. Faça uma busca manual:';
+            } else {
+                instrucaoEl.textContent = 'Encontramos múltiplos médicos. Selecione o correto:';
+            }
+            
+            // Mostrar dados do OCR
+            document.getElementById('medico-ocr-dados').innerHTML = `
+                <p><b>Nome:</b> ${dadosMedico.medico || 'Não identificado'}</p>
+                <p><b>CRM:</b> ${dadosMedico.crm || 'Não identificado'}</p>
+            `;
+            
+            // Renderizar lista de médicos
+            renderizarListaMedicos();
+            
+            // Mostrar tela
+            mostrarTela('selecionar-medico');
+        }
+
+        function renderizarListaMedicos() {
+            const container = document.getElementById('lista-medicos-encontrados');
+            
+            if (medicosEncontrados.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-search text-4xl mb-2"></i>
+                        <p>Nenhum médico encontrado. Use a busca manual abaixo.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = medicosEncontrados.map(item => {
+                const scoreClass = item.score >= 0.9 ? 'border-green-400 bg-green-50' : 
+                                  item.score >= 0.7 ? 'border-yellow-400 bg-yellow-50' : 
+                                  'border-gray-300 bg-gray-50';
+                
+                return `
+                    <button onclick='selecionarMedico(${JSON.stringify(item.medico)})' 
+                            class="w-full text-left p-4 border-2 ${scoreClass} rounded-lg hover:shadow-lg transition-all">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="font-bold text-lg text-gray-900">${item.medico.nome}</p>
+                                <p class="text-sm text-gray-600">
+                                    CRM: ${item.medico.crm} / ${item.medico.ufCrm}
+                                    ${item.medico.conselho ? ` | ${item.medico.conselho}` : ''}
+                                </p>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-xs font-bold ${
+                                item.score >= 0.9 ? 'bg-green-200 text-green-800' : 
+                                item.score >= 0.7 ? 'bg-yellow-200 text-yellow-800' : 
+                                'bg-gray-200 text-gray-800'
+                            }">
+                                ${Math.round(item.score * 100)}%
+                            </span>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function selecionarMedico(medico) {
+            medicoSelecionado = medico;
+            salvarAtendimentoCompleto();
+        }
+
+        async function buscarMedicoManual() {
+            const nome = document.getElementById('input-busca-medico-nome').value.trim();
+            const crm = document.getElementById('input-busca-medico-crm').value.trim();
+            const uf = document.getElementById('input-busca-medico-uf').value;
+            
+            if (!nome && !crm) {
+                alert('Preencha o nome ou CRM para buscar');
+                return;
+            }
+            
+            showLoading('Buscando médicos...');
+            
+            try {
+                const response = await fetch(`${API_URL}/totem/medicos/buscar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        nome: nome || undefined,
+                        crm: crm || undefined,
+                        uf: uf || undefined,
+                        limit: 10
+                    })
+                });
+                
+                const data = await response.json();
+                
+                hideLoading();
+                
+                if (data.success && data.medicos && data.medicos.length > 0) {
+                    medicosEncontrados = data.medicos;
+                    renderizarListaMedicos();
+                    document.getElementById('medico-instrucao').textContent = 
+                        `Encontrados ${data.medicos.length} médico(s). Selecione:`;
+                } else {
+                    alert('Nenhum médico encontrado com estes critérios.');
+                }
+            } catch (erro) {
+                hideLoading();
+                alert('Erro ao buscar médicos: ' + erro.message);
+            }
+        }
+
+        function voltarConfirmarExames() {
+            mostrarTela('confirmar-exames');
+        }
+
+        function continuarSemMedico() {
+            const confirmar = confirm(
+                'Deseja continuar sem identificar o médico?\n\n' +
+                'O atendimento será registrado sem informação de médico solicitante.'
+            );
+            
+            if (confirmar) {
+                medicoSelecionado = null;
+                salvarAtendimentoCompleto();
+            }
+        }
+    </script>
+
+</body>
+</html>

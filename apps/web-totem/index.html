@@ -1,0 +1,779 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Totem de Autoatendimento - Laboratório</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        /* Animações personalizadas */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse-slow {
+            animation: pulse 2s infinite;
+        }
+        
+        .slide-in-right {
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        
+        /* Layout de tela cheia */
+        .totem-screen {
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Botões grandes */
+        .totem-btn {
+            transition: all 0.3s ease;
+            transform: scale(1);
+        }
+        
+        .totem-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .totem-btn:active {
+            transform: scale(0.95);
+        }
+        
+        /* Timeout visual */
+        .timeout-bar {
+            animation: timeoutFill 600s linear;
+        }
+        
+        @keyframes timeoutFill {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
+
+        /* Camera specific styles */
+        .camera-area {
+            position: relative;
+            background: #f3f4f6;
+            border-radius: 0.75rem;
+            padding: 2rem;
+        }
+
+        .guides-area {
+            width: 350px;
+            height: 500px;
+        }
+
+        .document-area {
+            width: 500px;
+            height: 300px;
+        }
+
+        /* Footer fixo na parte inferior */
+        .footer-fixed {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+        }
+
+        /* Compensar espaço do footer fixo */
+        .content-with-footer {
+            padding-bottom: 80px;
+        }
+    </style>
+    
+    <!-- Biblioteca Tesseract.js para OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-green-50 to-emerald-100 totem-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-lg relative">
+        <div class="container mx-auto px-8 py-6">
+            <div class="flex items-center justify-between">
+                <!-- Logo -->
+                <div class="flex items-center">
+                    <img src="images/logo.png" alt="Logo" class="h-16">
+                </div>
+                
+                <!-- Clock & Date -->
+                <div class="text-right">
+                    <div id="current-time" class="text-2xl font-bold text-gray-900"></div>
+                    <div id="current-date" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+            
+            <!-- Timeout Bar -->
+            <div class="absolute bottom-0 left-0 w-full h-1 bg-gray-200">
+                <div id="timeout-bar" class="h-full bg-red-500 timeout-bar hidden"></div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 container mx-auto px-8 py-12 content-with-footer">
+        <!-- Welcome Screen -->
+        <div id="welcome-screen" class="text-center fade-in">
+            <div class="mb-12">
+                <div class="flex justify-center mb-8">
+                    <img src="images/logo-grande.png" alt="Logo" class="h-32">
+                </div>
+                <h2 class="text-5xl font-bold text-gray-900 mb-12">Totem de Autoatendimento</h2>
+            </div>
+            
+            <div class="flex justify-center max-w-2xl mx-auto">
+                <!-- Novo Atendimento -->
+                <button onclick="startNewAttendance()" class="totem-btn bg-green-600 hover:bg-green-700 text-white p-12 rounded-2xl shadow-2xl w-full">
+                    <i class="fas fa-user-plus text-6xl mb-6"></i>
+                    <h3 class="text-3xl font-bold mb-4">Novo Atendimento</h3>
+                    <p class="text-lg opacity-90">Iniciar novo cadastro para coleta</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- Convenio Selection Screen -->
+        <div id="convenio-screen" class="hidden fade-in">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 mb-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-id-card text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Selecione seu Convênio</h2>
+                        <p class="text-gray-600">Escolha o convênio/plano para atendimento</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-4 mb-8">
+                        <button onclick="selectConvenio('unimed')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-hospital text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Unimed</h3>
+                                    <p class="text-gray-600">Cooperativa médica</p>
+                                </div>
+                            </div>
+                        </button>
+                        
+                        <button onclick="selectConvenio('bradesco')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-hospital text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Bradesco Saúde</h3>
+                                    <p class="text-gray-600">Plano de saúde</p>
+                                </div>
+                            </div>
+                        </button>
+                        
+                        <button onclick="selectConvenio('amil')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-hospital text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Amil</h3>
+                                    <p class="text-gray-600">Plano de saúde</p>
+                                </div>
+                            </div>
+                        </button>
+                        
+                        <button onclick="selectConvenio('particular')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-credit-card text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Particular</h3>
+                                    <p class="text-gray-600">Pagamento próprio</p>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="button" onclick="goBack()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CNH/RG Capture Screen -->
+        <div id="document-capture-screen" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 mb-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-camera text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture seu Documento</h2>
+                        <p class="text-gray-600">Posicione sua CNH ou RG na área indicada</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="camera-area document-area">
+                            <video id="document-video" class="w-full h-full object-cover rounded-lg" style="display: none;"></video>
+                            <canvas id="document-canvas" class="w-full h-full object-cover rounded-lg" style="display: none;"></canvas>
+                            <div id="document-placeholder" class="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-400 rounded-lg">
+                                <div class="text-center">
+                                    <i class="fas fa-id-card text-6xl text-gray-400 mb-4"></i>
+                                    <p class="text-gray-500">Posicione o documento aqui</p>
+                                </div>
+                            </div>
+                            <div id="document-captured" class="w-full h-full flex items-center justify-center border-2 border-green-500 rounded-lg bg-green-50" style="display: none;">
+                                <div class="text-center">
+                                    <i class="fas fa-check-circle text-6xl text-green-500 mb-4"></i>
+                                    <p class="text-green-600 font-bold">Documento capturado!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button type="button" onclick="goBack()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                        <button type="button" id="capture-document" onclick="captureDocument()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>
+                            Capturar
+                        </button>
+                        <button type="button" id="continue-to-card" onclick="showCardCapture()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn" style="display: none;">
+                            Continuar
+                            <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Capture Screen -->
+        <div id="card-capture-screen" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 mb-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-camera text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture a Carteirinha</h2>
+                        <p class="text-gray-600">Posicione a carteirinha do seu plano na área indicada</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="camera-area document-area">
+                            <video id="card-video" class="w-full h-full object-cover rounded-lg" style="display: none;"></video>
+                            <canvas id="card-canvas" class="w-full h-full object-cover rounded-lg" style="display: none;"></canvas>
+                            <div id="card-placeholder" class="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-400 rounded-lg">
+                                <div class="text-center">
+                                    <i class="fas fa-credit-card text-6xl text-gray-400 mb-4"></i>
+                                    <p class="text-gray-500">Posicione a carteirinha aqui</p>
+                                </div>
+                            </div>
+                            <div id="card-captured" class="w-full h-full flex items-center justify-center border-2 border-green-500 rounded-lg bg-green-50" style="display: none;">
+                                <div class="text-center">
+                                    <i class="fas fa-check-circle text-6xl text-green-500 mb-4"></i>
+                                    <p class="text-green-600 font-bold">Carteirinha capturada!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button type="button" onclick="showDocumentCapture()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                        <button type="button" id="capture-card" onclick="captureCard()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>
+                            Capturar
+                        </button>
+                        <button type="button" id="continue-to-guides" onclick="showGuidesCapture()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn" style="display: none;">
+                            Continuar
+                            <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guides Capture Screen - FORMATO A4 -->
+        <div id="guides-capture-screen" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8 mb-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-camera text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture as Guias</h2>
+                        <p class="text-gray-600">Posicione as guias médicas na área indicada (A4/A5)</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="camera-area guides-area">
+                            <video id="guides-video" class="w-full h-full object-cover rounded-lg" style="display: none;"></video>
+                            <canvas id="guides-canvas" class="w-full h-full object-cover rounded-lg" style="display: none;"></canvas>
+                            <div id="guides-placeholder" class="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-400 rounded-lg">
+                                <div class="text-center">
+                                    <i class="fas fa-file-medical text-6xl text-gray-400 mb-4"></i>
+                                    <p class="text-gray-500 text-sm">Posicione as guias aqui</p>
+                                    <p class="text-gray-400 text-xs mt-2">Formato A4/A5</p>
+                                </div>
+                            </div>
+                            <div id="guides-captured" class="w-full h-full flex items-center justify-center border-2 border-green-500 rounded-lg bg-green-50" style="display: none;">
+                                <div class="text-center">
+                                    <i class="fas fa-check-circle text-6xl text-green-500 mb-4"></i>
+                                    <p class="text-green-600 font-bold">Guias capturadas!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button type="button" onclick="showCardCapture()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                        <button type="button" id="capture-guides" onclick="captureGuides()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>
+                            Capturar
+                        </button>
+                        <button type="button" id="finish-attendance" onclick="finishAttendance()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn" style="display: none;">
+                            Finalizar
+                            <i class="fas fa-check ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Consult Screen -->
+        <div id="consult-screen" class="hidden fade-in">
+            <div class="max-w-xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-search text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Consultar Atendimento</h2>
+                        <p class="text-gray-600">Digite seu protocolo ou CPF</p>
+                    </div>
+                    
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-lg font-medium text-gray-700 mb-2">Protocolo ou CPF</label>
+                            <input type="text" id="search-input" class="w-full px-4 py-3 border border-gray-300 rounded-lg text-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-center" placeholder="Digite aqui...">
+                        </div>
+                        
+                        <div class="flex space-x-4">
+                            <button type="button" onclick="goBack()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-3 px-6 rounded-lg text-lg totem-btn">
+                                <i class="fas fa-arrow-left mr-2"></i>
+                                Voltar
+                            </button>
+                            <button type="button" onclick="searchAttendance()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded-lg text-lg totem-btn">
+                                <i class="fas fa-search mr-2"></i>
+                                Consultar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Help Screen -->
+        <div id="help-screen" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-info-circle text-5xl text-purple-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Como usar o Totem</h2>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                        <div class="text-center p-6">
+                            <i class="fas fa-user-plus text-4xl text-green-500 mb-4"></i>
+                            <h3 class="text-xl font-bold mb-2">Novo Atendimento</h3>
+                            <p class="text-gray-600">Selecione o convênio e capture os documentos com a câmera única.</p>
+                        </div>
+                        
+                        <div class="text-center p-6">
+                            <i class="fas fa-search text-4xl text-green-500 mb-4"></i>
+                            <h3 class="text-xl font-bold mb-2">Consultar Status</h3>
+                            <p class="text-gray-600">Para verificar o andamento do seu atendimento, informe o protocolo ou CPF.</p>
+                        </div>
+                        
+                        <div class="text-center p-6">
+                            <i class="fas fa-clock text-4xl text-orange-500 mb-4"></i>
+                            <h3 class="text-xl font-bold mb-2">Timeout Automático</h3>
+                            <p class="text-gray-600">Por segurança, o totem retorna à tela inicial após 10 minutos de inatividade.</p>
+                        </div>
+                        
+                        <div class="text-center p-6">
+                            <i class="fas fa-headset text-4xl text-red-500 mb-4"></i>
+                            <h3 class="text-xl font-bold mb-2">Precisa de Ajuda?</h3>
+                            <p class="text-gray-600">Procure um atendente na recepção ou ligue para (xx) xxxx-xxxx.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button onclick="goBack()" class="bg-purple-600 hover:bg-purple-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar ao Início
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Screen -->
+        <div id="success-screen" class="hidden fade-in">
+            <div class="max-w-xl mx-auto text-center">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <i class="fas fa-check-circle text-6xl text-green-500 mb-6"></i>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-4">Atendimento Registrado!</h2>
+                    <p class="text-gray-600 mb-6">Seu protocolo de atendimento:</p>
+                    <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                        <span id="protocol-number" class="text-2xl font-mono font-bold text-green-600"></span>
+                    </div>
+                    <p class="text-gray-600 mb-8">Guarde este protocolo para consultas futuras. Aguarde ser chamado para a coleta.</p>
+                    
+                    <button onclick="printProtocol()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn mb-4">
+                        <i class="fas fa-print mr-2"></i>
+                        Imprimir Protocolo
+                    </button>
+                    
+                    <br>
+                    
+                    <button onclick="goHome()" class="bg-gray-600 hover:bg-gray-700 text-white py-2 px-6 rounded-lg text-lg totem-btn">
+                        <i class="fas fa-home mr-2"></i>
+                        Início
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer Fixo -->
+    <footer class="footer-fixed bg-white border-t border-gray-200 py-3 shadow-lg">
+        <div class="container mx-auto px-8 text-center">
+            <p class="text-gray-600 font-medium">
+                <i class="fas fa-code text-green-600 mr-2"></i>
+                Desenvolvido por LAVB Tecnologias
+            </p>
+        </div>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-8 text-center shadow-2xl">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-green-500 mx-auto mb-4"></div>
+            <p class="text-gray-800 font-bold text-xl loading-message">Processando...</p>
+            <p class="text-gray-500 text-sm mt-2">Aguarde por favor</p>
+        </div>
+    </div>
+
+    <script>
+        // Global Variables
+        let timeoutId = null;
+        let currentScreen = 'welcome';
+        let globalCameraStream = null;
+        const TIMEOUT_MINUTES = 10;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            resetTimeout();
+        });
+
+        // Update Date and Time
+        function updateDateTime() {
+            const now = new Date();
+            const timeOptions = { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false 
+            };
+            const dateOptions = { 
+                weekday: 'long',
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            
+            document.getElementById('current-time').textContent = 
+                now.toLocaleTimeString('pt-BR', timeOptions);
+            document.getElementById('current-date').textContent = 
+                now.toLocaleDateString('pt-BR', dateOptions);
+        }
+
+        // Timeout Management
+        function resetTimeout() {
+            clearTimeout(timeoutId);
+            hideTimeoutBar();
+            
+            timeoutId = setTimeout(() => {
+                showTimeoutWarning();
+            }, (TIMEOUT_MINUTES - 1) * 60 * 1000);
+        }
+
+        function showTimeoutWarning() {
+            showTimeoutBar();
+            setTimeout(goHome, 60000); // 1 minute warning
+        }
+
+        function showTimeoutBar() {
+            document.getElementById('timeout-bar').classList.remove('hidden');
+        }
+
+        function hideTimeoutBar() {
+            document.getElementById('timeout-bar').classList.add('hidden');
+        }
+
+        // Screen Management
+        function showScreen(screenId) {
+            // Hide all screens
+            const screens = ['welcome-screen', 'convenio-screen', 'document-capture-screen', 'card-capture-screen', 'guides-capture-screen', 'consult-screen', 'help-screen', 'success-screen'];
+            screens.forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+            
+            // Show target screen
+            document.getElementById(screenId).classList.remove('hidden');
+            currentScreen = screenId.replace('-screen', '');
+            resetTimeout();
+        }
+
+        // New Attendance Flow
+        function startNewAttendance() {
+            showScreen('convenio-screen');
+        }
+
+        function selectConvenio(tipo) {
+            window.convenioSelecionado = tipo;
+            initializeCameraFlow();
+        }
+
+        // CÂMERA ÚNICA - Camera Flow Management
+        async function initializeCameraFlow() {
+            try {
+                // Start camera ONCE for entire flow
+                globalCameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 },
+                        facingMode: 'environment' // Preferir câmera traseira se disponível
+                    } 
+                });
+                showDocumentCapture();
+            } catch (err) {
+                alert('Erro ao acessar a câmera: ' + err.message);
+                showScreen('welcome-screen');
+            }
+        }
+
+        function showDocumentCapture() {
+            showScreen('document-capture-screen');
+            if (globalCameraStream) {
+                const video = document.getElementById('document-video');
+                const placeholder = document.getElementById('document-placeholder');
+                
+                video.srcObject = globalCameraStream;
+                video.play();
+                
+                placeholder.style.display = 'none';
+                video.style.display = 'block';
+            }
+        }
+
+        function showCardCapture() {
+            showScreen('card-capture-screen');
+            if (globalCameraStream) {
+                const video = document.getElementById('card-video');
+                const placeholder = document.getElementById('card-placeholder');
+                
+                video.srcObject = globalCameraStream;
+                video.play();
+                
+                placeholder.style.display = 'none';
+                video.style.display = 'block';
+            }
+        }
+
+        function showGuidesCapture() {
+            showScreen('guides-capture-screen');
+            if (globalCameraStream) {
+                const video = document.getElementById('guides-video');
+                const placeholder = document.getElementById('guides-placeholder');
+                
+                video.srcObject = globalCameraStream;
+                video.play();
+                
+                placeholder.style.display = 'none';
+                video.style.display = 'block';
+            }
+        }
+
+        // Camera Capture Functions (com OCR)
+        function captureDocument() {
+            capturarDocumentoComOCR();
+        }
+
+        function captureCard() {
+            capturarCarteirinhaComOCR();
+        }
+
+        function captureGuides() {
+            const video = document.getElementById('guides-video');
+            const canvas = document.getElementById('guides-canvas');
+            const captured = document.getElementById('guides-captured');
+            const captureBtn = document.getElementById('capture-guides');
+            const finishBtn = document.getElementById('finish-attendance');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            video.style.display = 'none';
+            captured.style.display = 'flex';
+            captureBtn.style.display = 'none';
+            finishBtn.style.display = 'inline-block';
+            
+            // Save captured image data
+            const imageData = canvas.toDataURL('image/png');
+            window.guidesImage = imageData;
+            atendimentoData.imagem_guias = imageData;
+        }
+
+        function stopCameraStream() {
+            if (globalCameraStream) {
+                const tracks = globalCameraStream.getTracks();
+                tracks.forEach(track => track.stop());
+                globalCameraStream = null;
+            }
+        }
+
+        function finishAttendance() {
+            // Usar função de finalização com OCR
+            finalizarAtendimentoComOCR();
+        }
+
+        function showConsultAttendance() {
+            showScreen('consult-screen');
+        }
+
+        function showHelp() {
+            showScreen('help-screen');
+        }
+
+        function goBack() {
+            stopCameraStream();
+            showScreen('welcome-screen');
+        }
+
+        function goHome() {
+            stopCameraStream();
+            showScreen('welcome-screen');
+            clearForms();
+        }
+
+        function clearForms() {
+            // Reset captured data
+            window.convenioSelecionado = null;
+            window.documentImage = null;
+            window.cardImage = null;
+            window.guidesImage = null;
+            
+            document.getElementById('search-input').value = '';
+            
+            // Reset capture states
+            resetCaptureStates();
+        }
+
+        function resetCaptureStates() {
+            // Document capture reset
+            ['document', 'card', 'guides'].forEach(type => {
+                const video = document.getElementById(`${type}-video`);
+                const placeholder = document.getElementById(`${type}-placeholder`);
+                const captured = document.getElementById(`${type}-captured`);
+                
+                if (video) video.style.display = 'none';
+                if (placeholder) placeholder.style.display = 'flex';
+                if (captured) captured.style.display = 'none';
+            });
+            
+            // Reset buttons
+            const captureBtn = document.getElementById('capture-document');
+            const continueCardBtn = document.getElementById('continue-to-card');
+            const captureCardBtn = document.getElementById('capture-card');
+            const continueGuidesBtn = document.getElementById('continue-to-guides');
+            const captureGuidesBtn = document.getElementById('capture-guides');
+            const finishBtn = document.getElementById('finish-attendance');
+            
+            if (captureBtn) captureBtn.style.display = 'inline-block';
+            if (continueCardBtn) continueCardBtn.style.display = 'none';
+            if (captureCardBtn) captureCardBtn.style.display = 'inline-block';
+            if (continueGuidesBtn) continueGuidesBtn.style.display = 'none';
+            if (captureGuidesBtn) captureGuidesBtn.style.display = 'inline-block';
+            if (finishBtn) finishBtn.style.display = 'none';
+        }
+
+        // Utility Functions
+        function searchAttendance() {
+            const searchValue = document.getElementById('search-input').value.trim();
+            
+            if (!searchValue) {
+                alert('Por favor, informe o protocolo ou CPF.');
+                return;
+            }
+
+            // In real app, would query API
+            alert(`Pesquisando por: ${searchValue}\n\nEm desenvolvimento: Esta funcionalidade será conectada com a API do sistema.`);
+            
+            console.log('Search Attendance:', {
+                search: searchValue,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        function generateProtocol() {
+            const date = new Date();
+            const year = date.getFullYear().toString().substr(-2);
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+            
+            return `AT${year}${month}${day}${random}`;
+        }
+
+        function printProtocol() {
+            const protocol = document.getElementById('protocol-number').textContent;
+            const printContent = `
+                <div style="text-align: center; font-family: Arial, sans-serif;">
+                    <h2>Laboratório CACIM</h2>
+                    <h3>Protocolo de Atendimento</h3>
+                    <div style="border: 2px solid #22c55e; padding: 20px; margin: 20px;">
+                        <h1 style="color: #22c55e;">${protocol}</h1>
+                    </div>
+                    <p>Data: ${new Date().toLocaleString('pt-BR')}</p>
+                    <p>Guarde este protocolo para consultas futuras</p>
+                    <p style="font-size: 12px; color: #666;">--- Totem de Autoatendimento v2.0 ---</p>
+                    <hr>
+                    <p style="font-size: 10px; color: #888;">Desenvolvido por LAVB Tecnologias</p>
+                </div>
+            `;
+            
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Touch/Click anywhere resets timeout
+        document.addEventListener('click', resetTimeout);
+        document.addEventListener('touchstart', resetTimeout);
+    </script>
+    
+    <!-- Script de integração OCR -->
+    <script src="ocr-integration.js"></script>
+</body>
+</html>

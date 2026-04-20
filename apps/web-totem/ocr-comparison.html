@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Comparativo OCR - CNH/RG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <style>
+        .ocr-result {
+            min-height: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .winner {
+            border: 3px solid #10b981;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">🔍 Teste Comparativo OCR</h1>
+        
+        <!-- Configuração de APIs -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">⚙️ Configuração</h2>
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p class="text-sm mb-2">
+                    ✅ <strong>Tesseract:</strong> Funciona automaticamente (100% local)
+                </p>
+                <p class="text-sm mb-2">
+                    ☁️ <strong>Google Vision, AWS Textract, Azure Vision:</strong> Configurar no backend
+                </p>
+                <details class="mt-3">
+                    <summary class="cursor-pointer text-sm font-semibold text-blue-700">📝 Como configurar APIs no backend</summary>
+                    <div class="mt-3 text-sm space-y-2 text-gray-700">
+                        <p><strong>1.</strong> Edite <code>apps/api/.env</code></p>
+                        <p><strong>2.</strong> Configure as credenciais:</p>
+                        <pre class="bg-gray-800 text-green-400 p-3 rounded text-xs overflow-x-auto mt-2">
+# Google Cloud Vision (Service Account)
+GOOGLE_APPLICATION_CREDENTIALS=./totemcacim-xxxxx.json
+
+# AWS Textract
+AWS_REGION=sa-east-1
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+
+# Azure Computer Vision
+AZURE_VISION_API_KEY=...
+AZURE_VISION_ENDPOINT=https://...</pre>
+                        <p><strong>3.</strong> Reinicie o backend: <code>npm run start:dev</code></p>
+                        <p class="text-blue-600">📖 <a href="OCR-COMPARISON-GUIDE.md" target="_blank">Guia completo de configuração</a></p>
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <!-- Captura -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4">📸 Captura de Documento</h2>
+            <div class="flex flex-col items-center">
+                <video id="video" autoplay playsinline class="w-full max-w-2xl rounded-lg mb-4 hidden"></video>
+                <canvas id="canvas" class="w-full max-w-2xl rounded-lg mb-4 hidden"></canvas>
+                <canvas id="canvas-processado" class="w-full max-w-md rounded-lg mb-4 hidden border-2 border-blue-500"></canvas>
+                
+                <div class="flex gap-4">
+                    <button onclick="iniciarCamera()" 
+                            class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700">
+                        📷 Iniciar Câmera
+                    </button>
+                    <button onclick="capturarImagem()" id="btn-capturar"
+                            class="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 hidden">
+                        ✅ Capturar e Testar
+                    </button>
+                    <button onclick="limparTeste()"
+                            class="bg-gray-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-700">
+                        🔄 Limpar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resultados Comparativos -->
+        <div id="resultados" class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
+            <!-- Tesseract -->
+            <div id="card-tesseract" class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold">🔤 Tesseract.js v5</h3>
+                    <span id="status-tesseract" class="text-sm text-gray-500">Aguardando...</span>
+                </div>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Confiança:</span>
+                        <span id="conf-tesseract" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Tempo:</span>
+                        <span id="tempo-tesseract" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>CPF Encontrado:</span>
+                        <span id="cpf-tesseract" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="ocr-result bg-gray-50 p-4 rounded border text-sm font-mono whitespace-pre-wrap" id="texto-tesseract">
+                    Aguardando captura...
+                </div>
+            </div>
+
+            <!-- Google Vision -->
+            <div id="card-google" class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold">🌐 Google Vision</h3>
+                    <span id="status-google" class="text-sm text-gray-500">Aguardando...</span>
+                </div>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Confiança:</span>
+                        <span id="conf-google" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Tempo:</span>
+                        <span id="tempo-google" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>CPF Encontrado:</span>
+                        <span id="cpf-google" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="ocr-result bg-gray-50 p-4 rounded border text-sm font-mono whitespace-pre-wrap" id="texto-google">
+                    Aguardando captura...
+                </div>
+            </div>
+
+            <!-- AWS Textract -->
+            <div id="card-aws" class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold">☁️ AWS Textract</h3>
+                    <span id="status-aws" class="text-sm text-gray-500">Aguardando...</span>
+                </div>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Confiança:</span>
+                        <span id="conf-aws" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Tempo:</span>
+                        <span id="tempo-aws" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>CPF Encontrado:</span>
+                        <span id="cpf-aws" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="ocr-result bg-gray-50 p-4 rounded border text-sm font-mono whitespace-pre-wrap" id="texto-aws">
+                    Aguardando captura...
+                </div>
+            </div>
+
+            <!-- Azure Computer Vision -->
+            <div id="card-azure" class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold">🔷 Azure Computer Vision</h3>
+                    <span id="status-azure" class="text-sm text-gray-500">Aguardando...</span>
+                </div>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Confiança:</span>
+                        <span id="conf-azure" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Tempo:</span>
+                        <span id="tempo-azure" class="font-bold">-</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span>CPF Encontrado:</span>
+                        <span id="cpf-azure" class="font-bold">-</span>
+                    </div>
+                </div>
+                <div class="ocr-result bg-gray-50 p-4 rounded border text-sm font-mono whitespace-pre-wrap" id="texto-azure">
+                    Aguardando captura...
+                </div>
+            </div>
+        </div>
+
+        <!-- Vencedor -->
+        <div id="vencedor" class="bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg shadow-lg p-6 mt-6 hidden">
+            <h2 class="text-2xl font-bold mb-2 text-center">🏆 Vencedor</h2>
+            <p class="text-center text-xl" id="vencedor-nome"></p>
+            <p class="text-center text-sm mt-2" id="vencedor-detalhes"></p>
+        </div>
+
+        <!-- Guia de configuração -->
+        <div id="config-help" class="bg-blue-50 border border-blue-200 rounded-lg p-6 mt-8">
+            <h2 class="text-xl font-bold mb-4">📚 Como obter as APIs</h2>
+            <div class="space-y-4 text-sm">
+                <div>
+                    <h3 class="font-bold">🌐 Google Cloud Vision:</h3>
+                    <ol class="list-decimal ml-5 mt-2 space-y-1">
+                        <li>Acesse: <a href="https://console.cloud.google.com" target="_blank" class="text-blue-600 underline">console.cloud.google.com</a></li>
+                        <li>Crie um projeto → APIs & Services → Enable APIs → Vision AI</li>
+                        <li>Credentials → Create Credentials → API Key</li>
+                        <li>Copie a chave e cole acima</li>
+                    </ol>
+                    <p class="text-gray-600 mt-1">💰 Gratuito: 1.000 requisições/mês</p>
+                </div>
+                <div>
+                    <h3 class="font-bold">☁️ AWS Textract:</h3>
+                    <ol class="list-decimal ml-5 mt-2 space-y-1">
+                        <li>Acesse: <a href="https://aws.amazon.com/console" target="_blank" class="text-blue-600 underline">aws.amazon.com/console</a></li>
+                        <li>IAM → Users → Create User → Attach Policy: AmazonTextractFullAccess</li>
+                        <li>Security Credentials → Create Access Key</li>
+                        <li>Copie Access Key ID e Secret Access Key</li>
+                    </ol>
+                    <p class="text-gray-600 mt-1">💰 Gratuito: 1.000 páginas/mês (3 primeiros meses)</p>
+                </div>
+                <div>
+                    <h3 class="font-bold">🔷 Azure Computer Vision:</h3>
+                    <ol class="list-decimal ml-5 mt-2 space-y-1">
+                        <li>Acesse: <a href="https://portal.azure.com" target="_blank" class="text-blue-600 underline">portal.azure.com</a></li>
+                        <li>Create Resource → AI + Machine Learning → Computer Vision</li>
+                        <li>Keys and Endpoint → Copie Key 1 e Endpoint</li>
+                    </ol>
+                    <p class="text-gray-600 mt-1">💰 Gratuito: 5.000 transações/mês</p>
+                </div>
+                <div>
+                    <h3 class="font-bold">🔤 Tesseract.js:</h3>
+                    <p class="text-gray-600">✅ Gratuito e local - sem necessidade de API!</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let stream = null;
+        let imagemCapturada = null;
+
+        async function iniciarCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    } 
+                });
+                
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                video.classList.remove('hidden');
+                document.getElementById('btn-capturar').classList.remove('hidden');
+                console.log('✅ Câmera iniciada');
+            } catch (err) {
+                console.error('❌ Erro ao acessar câmera:', err);
+                alert('Erro ao acessar câmera: ' + err.message);
+            }
+        }
+
+        function capturarImagem() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            canvas.classList.remove('hidden');
+            video.classList.add('hidden');
+            document.getElementById('btn-capturar').classList.add('hidden');
+            
+            // Parar câmera
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            imagemCapturada = canvas.toDataURL('image/jpeg', 0.95);
+            
+            // Processar imagem
+            processarImagemComOCRs();
+        }
+
+        async function processarImagemComOCRs() {
+            document.getElementById('resultados').classList.remove('hidden');
+            
+            // Resetar cards
+            ['tesseract', 'google', 'aws', 'azure'].forEach(id => {
+                document.getElementById(`status-${id}`).textContent = 'Processando...';
+                document.getElementById(`status-${id}`).className = 'text-sm text-blue-600 animate-pulse';
+                document.getElementById(`texto-${id}`).textContent = 'Aguardando...';
+                document.getElementById(`cpf-${id}`).textContent = '-';
+                document.getElementById(`conf-${id}`).textContent = '-';
+                document.getElementById(`tempo-${id}`).textContent = '-';
+                document.getElementById(`card-${id}`).classList.remove('winner');
+            });
+            
+            document.getElementById('vencedor').classList.add('hidden');
+            
+            // Executar todos em paralelo
+            const resultados = await Promise.allSettled([
+                processarTesseract(),
+                processarGoogleVision(),
+                processarAWSTextract(),
+                processarAzureVision()
+            ]);
+            
+            console.log('📊 Todos os OCRs processados:', resultados);
+            
+            // Determinar vencedor
+            determinarVencedor();
+        }
+
+        async function processarTesseract() {
+            const inicio = performance.now();
+            
+            try {
+                const canvas = document.getElementById('canvas');
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(canvas, 0, 0);
+                
+                // Pré-processar
+                preprocessImageForOCR(tempCanvas);
+                
+                // Mostrar processado
+                const canvasProc = document.getElementById('canvas-processado');
+                canvasProc.width = tempCanvas.width;
+                canvasProc.height = tempCanvas.height;
+                canvasProc.getContext('2d').drawImage(tempCanvas, 0, 0);
+                canvasProc.classList.remove('hidden');
+                
+                const worker = await Tesseract.createWorker('por');
+                const result = await worker.recognize(tempCanvas);
+                await worker.terminate();
+                
+                const tempo = ((performance.now() - inicio) / 1000).toFixed(2);
+                const texto = result.data.text;
+                const confianca = result.data.confidence.toFixed(1);
+                const cpf = extrairCPF(texto);
+                
+                document.getElementById('status-tesseract').textContent = '✅ Concluído';
+                document.getElementById('status-tesseract').className = 'text-sm text-green-600';
+                document.getElementById('texto-tesseract').textContent = texto;
+                document.getElementById('cpf-tesseract').textContent = cpf || 'Não encontrado';
+                document.getElementById('cpf-tesseract').className = cpf ? 'font-bold text-green-600' : 'font-bold text-red-600';
+                document.getElementById('conf-tesseract').textContent = confianca + '%';
+                document.getElementById('tempo-tesseract').textContent = tempo + 's';
+                
+                return { nome: 'Tesseract', cpf, confianca: parseFloat(confianca), tempo: parseFloat(tempo), texto };
+            } catch (err) {
+                console.error('❌ Tesseract erro:', err);
+                document.getElementById('status-tesseract').textContent = '❌ Erro';
+                document.getElementById('status-tesseract').className = 'text-sm text-red-600';
+                document.getElementById('texto-tesseract').textContent = 'Erro: ' + err.message;
+                return { nome: 'Tesseract', erro: true };
+            }
+        }
+
+        async function processarGoogleVision() {
+            const inicio = performance.now();
+            
+            try {
+                // Usar backend (service account) - mais seguro
+                const response = await fetch('http://localhost:3000/api/ocr/google-vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imagemCapturada })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.sucesso) {
+                    throw new Error(data.erro || 'Erro desconhecido');
+                }
+                
+                const tempo = ((performance.now() - inicio) / 1000).toFixed(2);
+                const texto = data.texto || '';
+                const confianca = data.confianca || 0;
+                const cpf = extrairCPF(texto);
+                
+                document.getElementById('status-google').textContent = '✅ Concluído';
+                document.getElementById('status-google').className = 'text-sm text-green-600';
+                document.getElementById('texto-google').textContent = texto;
+                document.getElementById('cpf-google').textContent = cpf || 'Não encontrado';
+                document.getElementById('cpf-google').className = cpf ? 'font-bold text-green-600' : 'font-bold text-red-600';
+                document.getElementById('conf-google').textContent = confianca.toFixed(1) + '%';
+                document.getElementById('tempo-google').textContent = tempo + 's';
+                
+                return { nome: 'Google Vision', cpf, confianca, tempo: parseFloat(tempo), texto };
+            } catch (err) {
+                console.error('❌ Google Vision erro:', err);
+                document.getElementById('status-google').textContent = '⚠️ Erro Backend';
+                document.getElementById('status-google').className = 'text-sm text-yellow-600';
+                document.getElementById('texto-google').textContent = 
+                    '⚠️ Google Vision requer backend configurado.\n\n' +
+                    '1. Configure .env:\n' +
+                    '   GOOGLE_APPLICATION_CREDENTIALS=./totemcacim-xxxxx.json\n\n' +
+                    '2. Instale: npm install @google-cloud/vision\n\n' +
+                    '3. Reinicie: npm run start:dev\n\n' +
+                    'Erro: ' + err.message;
+                
+                return { nome: 'Google Vision', ignorar: true };
+            }
+        }
+
+        async function processarAWSTextract() {
+            const accessKey = document.getElementById('aws-access-key').value.trim();
+            const secretKey = document.getElementById('aws-secret-key').value.trim();
+            
+            const inicio = performance.now();
+            
+            try {
+                // Tentar via backend primeiro (mais seguro)
+                const response = await fetch('http://localhost:3000/api/ocr/aws-textract', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imagemCapturada })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.sucesso) {
+                    throw new Error(data.erro || 'Erro desconhecido');
+                }
+                
+                const tempo = ((performance.now() - inicio) / 1000).toFixed(2);
+                const texto = data.texto || '';
+                const confianca = data.confianca || 0;
+                const cpf = extrairCPF(texto);
+                
+                document.getElementById('status-aws').textContent = '✅ Concluído';
+                document.getElementById('status-aws').className = 'text-sm text-green-600';
+                document.getElementById('texto-aws').textContent = texto;
+                document.getElementById('cpf-aws').textContent = cpf || 'Não encontrado';
+                document.getElementById('cpf-aws').className = cpf ? 'font-bold text-green-600' : 'font-bold text-red-600';
+                document.getElementById('conf-aws').textContent = confianca.toFixed(1) + '%';
+                document.getElementById('tempo-aws').textContent = tempo + 's';
+                
+                return { nome: 'AWS Textract', cpf, confianca, tempo: parseFloat(tempo), texto };
+            } catch (err) {
+                console.error('❌ AWS Textract erro:', err);
+                document.getElementById('status-aws').textContent = '⚠️ Use Backend';
+                document.getElementById('status-aws').className = 'text-sm text-yellow-600';
+                document.getElementById('texto-aws').textContent = 
+                    '⚠️ AWS Textract requer backend.\n\n' +
+                    '1. Configure .env no backend:\n' +
+                    '   AWS_REGION=sa-east-1\n' +
+                    '   AWS_ACCESS_KEY_ID=...\n' +
+                    '   AWS_SECRET_ACCESS_KEY=...\n\n' +
+                    '2. Instale: npm install @aws-sdk/client-textract\n\n' +
+                    '3. Reinicie: npm run start:dev\n\n' +
+                    'Erro: ' + err.message;
+                
+                return { nome: 'AWS Textract', ignorar: true };
+            }
+        }
+
+        async function processarAzureVision() {
+            const inicio = performance.now();
+            
+            try {
+                // Usar backend - mais seguro
+                const response = await fetch('http://localhost:3000/api/ocr/azure-vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imagemCapturada })
+                });
+                
+                const data = await response.json();
+                
+                if (!data.sucesso) {
+                    throw new Error(data.erro || 'Erro desconhecido');
+                }
+                
+                const tempo = ((performance.now() - inicio) / 1000).toFixed(2);
+                const texto = data.texto || '';
+                const confianca = data.confianca || 0;
+                const cpf = extrairCPF(texto);
+                
+                document.getElementById('status-azure').textContent = '✅ Concluído';
+                document.getElementById('status-azure').className = 'text-sm text-green-600';
+                document.getElementById('texto-azure').textContent = texto;
+                document.getElementById('cpf-azure').textContent = cpf || 'Não encontrado';
+                document.getElementById('cpf-azure').className = cpf ? 'font-bold text-green-600' : 'font-bold text-red-600';
+                document.getElementById('conf-azure').textContent = confianca.toFixed(1) + '%';
+                document.getElementById('tempo-azure').textContent = tempo + 's';
+                
+                return { nome: 'Azure Computer Vision', cpf, confianca, tempo: parseFloat(tempo), texto };
+            } catch (err) {
+                console.error('❌ Azure Vision erro:', err);
+                document.getElementById('status-azure').textContent = '⚠️ Erro Backend';
+                document.getElementById('status-azure').className = 'text-sm text-yellow-600';
+                document.getElementById('texto-azure').textContent = 
+                    '⚠️ Azure Vision requer backend configurado.\n\n' +
+                    '1. Configure .env:\n' +
+                    '   AZURE_VISION_API_KEY=...\n' +
+                    '   AZURE_VISION_ENDPOINT=https://...\n\n' +
+                    '2. Reinicie: npm run start:dev\n\n' +
+                    'Erro: ' + err.message;
+                
+                return { nome: 'Azure Computer Vision', ignorar: true };
+            }
+        }
+
+        function determinarVencedor() {
+            const resultados = [
+                {
+                    nome: 'Tesseract',
+                    cpf: document.getElementById('cpf-tesseract').textContent,
+                    conf: parseFloat(document.getElementById('conf-tesseract').textContent),
+                    tempo: parseFloat(document.getElementById('tempo-tesseract').textContent),
+                    card: 'card-tesseract'
+                },
+                {
+                    nome: 'Google Vision',
+                    cpf: document.getElementById('cpf-google').textContent,
+                    conf: parseFloat(document.getElementById('conf-google').textContent),
+                    tempo: parseFloat(document.getElementById('tempo-google').textContent),
+                    card: 'card-google'
+                },
+                {
+                    nome: 'AWS Textract',
+                    cpf: document.getElementById('cpf-aws').textContent,
+                    conf: parseFloat(document.getElementById('conf-aws').textContent),
+                    tempo: parseFloat(document.getElementById('tempo-aws').textContent),
+                    card: 'card-aws'
+                },
+                {
+                    nome: 'Azure Computer Vision',
+                    cpf: document.getElementById('cpf-azure').textContent,
+                    conf: parseFloat(document.getElementById('conf-azure').textContent),
+                    tempo: parseFloat(document.getElementById('tempo-azure').textContent),
+                    card: 'card-azure'
+                }
+            ];
+            
+            // Filtrar apenas os que encontraram CPF
+            const comCPF = resultados.filter(r => r.cpf && r.cpf !== 'Não encontrado' && r.cpf !== '-');
+            
+            if (comCPF.length === 0) {
+                document.getElementById('vencedor').classList.remove('hidden');
+                document.getElementById('vencedor-nome').textContent = 'Nenhum OCR encontrou CPF';
+                document.getElementById('vencedor-detalhes').textContent = 'Tente melhorar iluminação ou posicionamento';
+                return;
+            }
+            
+            // Ordenar por confiança e tempo
+            comCPF.sort((a, b) => {
+                if (b.conf !== a.conf) return b.conf - a.conf;
+                return a.tempo - b.tempo;
+            });
+            
+            const vencedor = comCPF[0];
+            
+            document.getElementById('vencedor').classList.remove('hidden');
+            document.getElementById('vencedor-nome').textContent = vencedor.nome;
+            document.getElementById('vencedor-detalhes').textContent = 
+                `CPF: ${vencedor.cpf} | Confiança: ${vencedor.conf}% | Tempo: ${vencedor.tempo}s`;
+            
+            // Destacar card vencedor
+            document.getElementById(vencedor.card).classList.add('winner');
+        }
+
+        function limparTeste() {
+            location.reload();
+        }
+
+        // Funções auxiliares (copiar do totem.html)
+        function preprocessImageForOCR(canvas) {
+            const ctx = canvas.getContext('2d');
+            
+            const targetWidth = 1600;
+            const scale = targetWidth / canvas.width;
+            const targetHeight = canvas.height * scale;
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = targetWidth;
+            tempCanvas.height = targetHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+            
+            const imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+            const data = imageData.data;
+            
+            // Grayscale
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+            }
+            
+            // Blur
+            const blurred = gaussianBlur(imageData, targetWidth, targetHeight);
+            
+            // Otsu threshold
+            const threshold = calculateOtsuThreshold(blurred);
+            
+            for (let i = 0; i < blurred.length; i += 4) {
+                const value = blurred[i] > threshold ? 255 : 0;
+                data[i] = value;
+                data[i + 1] = value;
+                data[i + 2] = value;
+            }
+            
+            tempCtx.putImageData(imageData, 0, 0);
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            ctx.drawImage(tempCanvas, 0, 0);
+        }
+
+        function gaussianBlur(imageData, width, height) {
+            const data = imageData.data;
+            const result = new Uint8ClampedArray(data);
+            const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+            const kernelSum = 16;
+            
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    let sum = 0;
+                    for (let ky = -1; ky <= 1; ky++) {
+                        for (let kx = -1; kx <= 1; kx++) {
+                            const idx = ((y + ky) * width + (x + kx)) * 4;
+                            const kernelIdx = (ky + 1) * 3 + (kx + 1);
+                            sum += data[idx] * kernel[kernelIdx];
+                        }
+                    }
+                    const idx = (y * width + x) * 4;
+                    result[idx] = sum / kernelSum;
+                }
+            }
+            
+            return result;
+        }
+
+        function calculateOtsuThreshold(data) {
+            const histogram = new Array(256).fill(0);
+            const total = data.length / 4;
+            
+            for (let i = 0; i < data.length; i += 4) {
+                histogram[data[i]]++;
+            }
+            
+            let sum = 0;
+            for (let i = 0; i < 256; i++) {
+                sum += i * histogram[i];
+            }
+            
+            let sumB = 0, wB = 0, wF = 0, maxVariance = 0, threshold = 0;
+            
+            for (let i = 0; i < 256; i++) {
+                wB += histogram[i];
+                if (wB === 0) continue;
+                
+                wF = total - wB;
+                if (wF === 0) break;
+                
+                sumB += i * histogram[i];
+                const mB = sumB / wB;
+                const mF = (sum - sumB) / wF;
+                const variance = wB * wF * (mB - mF) * (mB - mF);
+                
+                if (variance > maxVariance) {
+                    maxVariance = variance;
+                    threshold = i;
+                }
+            }
+            
+            return threshold;
+        }
+
+        function extrairCPF(texto) {
+            // Estratégia 1: Padrão "CPF" explícito
+            const padraoCPFExplicito = /CPF[:\s\-\.]*([0-9O]{3}[\s\.\-]*[0-9O]{3}[\s\.\-]*[0-9O]{3}[\s\.\-]*[0-9O]{2})/gi;
+            let match = texto.match(padraoCPFExplicito);
+            if (match) {
+                const cpfCandidato = match[0].replace(/[^\dO]/g, '').replace(/O/g, '0');
+                if (cpfCandidato.length === 11) {
+                    return formatarCPF(cpfCandidato);
+                }
+            }
+            
+            // Estratégia 2: Padrão formatado
+            const padraoFormatado = /(\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{2})/g;
+            const matches = [...texto.matchAll(padraoFormatado)];
+            
+            for (const m of matches) {
+                const cpfCandidato = m[0].replace(/\D/g, '');
+                if (cpfCandidato.length === 11 && !cpfCandidato.startsWith('0')) {
+                    return formatarCPF(cpfCandidato);
+                }
+            }
+            
+            // Estratégia 3: Sequência de 11 dígitos
+            const numeros = texto.match(/\d+/g);
+            if (numeros) {
+                for (const num of numeros) {
+                    if (num.length === 11 && !num.startsWith('0')) {
+                        return formatarCPF(num);
+                    }
+                }
+            }
+            
+            return null;
+        }
+
+        function formatarCPF(cpf) {
+            return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        }
+    </script>
+</body>
+</html>

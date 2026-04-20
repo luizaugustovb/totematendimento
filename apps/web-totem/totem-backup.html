@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Totem de Autoatendimento - Laboratório</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+        .totem-screen { height: 100vh; overflow: hidden; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .totem-btn { transition: all 0.3s ease; }
+        .totem-btn:hover { transform: scale(1.05); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+        .totem-btn:active { transform: scale(0.95); }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-green-50 to-emerald-100 totem-screen">
+
+    <!-- Header -->
+    <header class="bg-white shadow-lg">
+        <div class="container mx-auto px-8 py-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-flask text-4xl text-green-600 mr-4"></i>
+                    <h1 class="text-2xl font-bold text-gray-900">Laboratório Autoatendimento</h1>
+                </div>
+                <div class="text-right">
+                    <div id="current-time" class="text-2xl font-bold text-gray-900"></div>
+                    <div id="current-date" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+            <!-- DEBUG: Indicador de tela ativa -->
+            <div class="mt-3 text-center">
+                <span class="inline-block bg-yellow-100 text-yellow-800 text-xs px-3 py-1 rounded-full font-mono">
+                    DEBUG: Tela Ativa = <span id="debug-tela">welcome</span>
+                </span>
+                <button onclick="console.log('Camera stream:', cameraStream)" class="ml-2 bg-blue-100 text-blue-800 text-xs px-3 py-1 rounded-full">
+                    Check Camera
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-8 py-12">
+        
+        <!-- 1. TELA INICIAL -->
+        <div id="screen-welcome" class="fade-in">
+            <div class="max-w-2xl mx-auto text-center">
+                <i class="fas fa-flask text-8xl text-green-600 mb-8"></i>
+                <h2 class="text-5xl font-bold text-gray-900 mb-12">Bem-vindo!</h2>
+                
+                <button onclick="iniciarAtendimento()" class="totem-btn bg-green-600 hover:bg-green-700 text-white p-12 rounded-2xl shadow-2xl w-full max-w-md mb-4">
+                    <i class="fas fa-user-plus text-6xl mb-6"></i>
+                    <h3 class="text-3xl font-bold mb-4">Iniciar Atendimento</h3>
+                    <p class="text-lg opacity-90">Toque para começar</p>
+                </button>
+                
+                <!-- Botão de Teste -->
+                <button onclick="iniciarTesteSemCamera()" class="totem-btn bg-yellow-500 hover:bg-yellow-600 text-white p-8 rounded-xl shadow-xl w-full max-w-md">
+                    <i class="fas fa-bug text-4xl mb-4"></i>
+                    <h3 class="text-2xl font-bold mb-2">Modo Teste (Sem Câmera)</h3>
+                    <p class="text-sm opacity-90">Usar CPF 200.044.604-30</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. CAPTURA DE CNH/RG -->
+        <div id="screen-documento" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-id-card text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture seu Documento</h2>
+                        <p class="text-gray-600">Posicione sua CNH ou RG na frente da câmera</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-xl overflow-hidden">
+                            <video id="video-documento" class="w-full h-full object-cover" autoplay playsinline></video>
+                            <canvas id="canvas-documento" class="hidden"></canvas>
+                            <div id="preview-documento" class="hidden absolute inset-0 flex items-center justify-center bg-black">
+                                <img id="img-documento" class="max-w-full max-h-full">
+                            </div>
+                            <div class="absolute top-4 left-4 right-4 flex justify-between items-center">
+                                <div id="ocr-status" class="hidden bg-blue-600 text-white px-4 py-2 rounded-lg">
+                                    <i class="fas fa-spinner fa-spin mr-2"></i>
+                                    <span>Processando OCR...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- DEBUG: Texto OCR Capturado -->
+                    <div id="debug-ocr" class="hidden mb-8 bg-yellow-50 border-2 border-yellow-400 rounded-xl p-6">
+                        <div class="flex items-center mb-4">
+                            <i class="fas fa-bug text-yellow-600 text-2xl mr-3"></i>
+                            <h3 class="text-xl font-bold text-yellow-900">DEBUG - Texto Capturado pelo OCR</h3>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg border border-yellow-300">
+                            <pre id="texto-ocr" class="text-sm text-gray-800 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto"></pre>
+                        </div>
+                        <div id="cpf-extraido" class="mt-4 p-3 bg-green-100 border border-green-400 rounded-lg hidden">
+                            <span class="font-bold text-green-900">CPF Extraído: </span>
+                            <span id="cpf-valor" class="text-green-700 font-mono text-lg"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="voltarInicio()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                        <button id="btn-capturar-doc" onclick="capturarDocumento()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>
+                            Capturar
+                        </button>
+                        <button id="btn-confirmar-doc" onclick="confirmarDocumento()" class="hidden bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            Confirmar
+                            <i class="fas fa-arrow-right ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. CONFIRMAÇÃO DE DADOS -->
+        <div id="screen-confirmacao" class="hidden fade-in">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-user-check text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Confirme seus Dados</h2>
+                        <p class="text-gray-600">Verifique se as informações estão corretas</p>
+                    </div>
+                    
+                    <div id="dados-cliente" class="space-y-4 mb-8 bg-gray-50 p-6 rounded-xl">
+                        <!-- Dados serão preenchidos via JavaScript -->
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="voltarDocumento()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-arrow-left mr-2"></i>
+                            Voltar
+                        </button>
+                        <button onclick="confirmarCliente()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-check mr-2"></i>
+                            Confirmar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. SELEÇÃO DE CONVÊNIO -->
+        <div id="screen-convenio" class="hidden fade-in">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-hospital text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Selecione seu Convênio</h2>
+                        <p class="text-gray-600">Escolha o convênio/plano para atendimento</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 gap-4">
+                        <button onclick="selecionarConvenio('unimed')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-hospital text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Unimed</h3>
+                                    <p class="text-gray-600">Cooperativa médica</p>
+                                </div>
+                            </div>
+                        </button>
+                        
+                        <button onclick="selecionarConvenio('bradesco')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-hospital text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Bradesco Saúde</h3>
+                                    <p class="text-gray-600">Plano de saúde</p>
+                                </div>
+                            </div>
+                        </button>
+                        
+                        <button onclick="selecionarConvenio('particular')" class="totem-btn bg-green-100 hover:bg-green-200 border-2 border-green-300 p-6 rounded-xl text-left">
+                            <div class="flex items-center">
+                                <i class="fas fa-credit-card text-2xl text-green-600 mr-4"></i>
+                                <div>
+                                    <h3 class="text-xl font-bold text-gray-900">Particular</h3>
+                                    <p class="text-gray-600">Pagamento próprio</p>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. CAPTURA DE CARTEIRINHA -->
+        <div id="screen-carteirinha" class="hidden fade-in">
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <div class="text-center mb-8">
+                        <i class="fas fa-credit-card text-5xl text-green-500 mb-4"></i>
+                        <h2 class="text-3xl font-bold text-gray-900">Capture a Carteirinha</h2>
+                        <p class="text-gray-600">Posicione a carteirinha do convênio na frente da câmera</p>
+                    </div>
+                    
+                    <div class="flex justify-center mb-8">
+                        <div class="relative w-full max-w-2xl aspect-video bg-gray-900 rounded-xl overflow-hidden">
+                            <video id="video-carteirinha" class="w-full h-full object-cover" autoplay playsinline></video>
+                            <canvas id="canvas-carteirinha" class="hidden"></canvas>
+                            <div id="preview-carteirinha" class="hidden absolute inset-0 flex items-center justify-center bg-black">
+                                <img id="img-carteirinha" class="max-w-full max-h-full">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 justify-center">
+                        <button onclick="pularCarteirinha()" class="bg-gray-600 hover:bg-gray-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            Pular
+                        </button>
+                        <button id="btn-capturar-cart" onclick="capturarCarteirinha()" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            <i class="fas fa-camera mr-2"></i>
+                            Capturar
+                        </button>
+                        <button id="btn-finalizar" onclick="finalizarAtendimento()" class="hidden bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                            Finalizar
+                            <i class="fas fa-check ml-2"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. SUCESSO -->
+        <div id="screen-sucesso" class="hidden fade-in">
+            <div class="max-w-xl mx-auto text-center">
+                <div class="bg-white rounded-2xl shadow-2xl p-8">
+                    <i class="fas fa-check-circle text-8xl text-green-500 mb-6"></i>
+                    <h2 class="text-4xl font-bold text-gray-900 mb-4">Atendimento Registrado!</h2>
+                    <p class="text-gray-600 mb-6">Seu protocolo:</p>
+                    <div class="bg-gray-100 p-6 rounded-lg mb-8">
+                        <span id="protocolo" class="text-3xl font-mono font-bold text-green-600"></span>
+                    </div>
+                    <p class="text-gray-600 mb-8">Aguarde ser chamado para a coleta.</p>
+                    <button onclick="voltarInicio()" class="bg-green-600 hover:bg-green-700 text-white py-3 px-8 rounded-lg text-lg totem-btn">
+                        <i class="fas fa-home mr-2"></i>
+                        Novo Atendimento
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 text-center">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-green-500 mx-auto mb-4"></div>
+            <p id="loading-text" class="text-gray-800 font-bold text-xl">Processando...</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuração da API
+        const API_URL = 'http://localhost:3000/api';
+        
+        // Estado global
+        let cameraStream = null;
+        let dadosCliente = null;
+        let dadosDocumento = null;
+        let dadosCarteirinha = null;
+        let convenioSelecionado = null;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+        });
+
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString('pt-BR', { hour12: false });
+            document.getElementById('current-date').textContent = now.toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        // Navegação entre telas
+        function mostrarTela(tela) {
+            console.log('Mudando para tela:', tela);
+            const telas = ['welcome', 'documento', 'confirmacao', 'convenio', 'carteirinha', 'sucesso'];
+            telas.forEach(id => {
+                const elemento = document.getElementById('screen-' + id);
+                if (elemento) {
+                    elemento.classList.add('hidden');
+                }
+            });
+            
+            const telaNova = document.getElementById('screen-' + tela);
+            if (telaNova) {
+                telaNova.classList.remove('hidden');
+                document.getElementById('debug-tela').textContent = tela;
+                console.log('Tela exibida:', tela);
+            } else {
+                console.error('Tela não encontrada:', tela);
+            }
+        }
+
+        function showLoading(text = 'Processando...') {
+            document.getElementById('loading-text').textContent = text;
+            document.getElementById('loading').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        // FLUXO 1: Iniciar
+        async function iniciarAtendimento() {
+            console.log('Iniciando atendimento...');
+            mostrarTela('documento');
+            
+            try {
+                console.log('Solicitando acesso à câmera...');
+                await iniciarCamera('documento');
+                console.log('Câmera iniciada com sucesso!');
+            } catch (err) {
+                console.error('Erro ao iniciar câmera:', err);
+            }
+        }
+        
+        // MODO TESTE: Iniciar sem câmera
+        function iniciarTesteSemCamera() {
+            console.log('MODO TESTE: Iniciando sem câmera...');
+            
+            // Simular documento com CPF de teste
+            dadosDocumento = {
+                imagem: createTestImage(),
+                cpf: '20004460430'
+            };
+            
+            // Simular dados do cliente (mock)
+            dadosCliente = {
+                codigo_cliente: 1,
+                nome: 'TESTE SISTEMA AUTOATENDIMENTO',
+                cpf: '20004460430',
+                data_nascimento: '01/01/1990',
+                celular: '(11) 98765-4321',
+                email: 'teste@email.com',
+                endereco: 'Rua Teste, 123 - Centro - São Paulo/SP'
+            };
+            
+            mostrarConfirmacao();
+        }
+        
+        function createTestImage() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#000000';
+            ctx.font = '20px Arial';
+            ctx.fillText('DOCUMENTO DE TESTE', 200, 100);
+            ctx.fillText('CPF: 200.044.604-30', 200, 150);
+            ctx.fillText('Nome: TESTE SISTEMA', 200, 200);
+            
+            return canvas.toDataURL('image/jpeg', 0.95);
+        }
+
+        async function iniciarCamera(tipo) {
+            try {
+                // Verificar se o navegador suporta getUserMedia
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Seu navegador não suporta acesso à câmera. Use Chrome, Edge ou Firefox.');
+                }
+                
+                console.log('Acessando câmera...');
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 }, 
+                        height: { ideal: 720 }
+                    } 
+                });
+                
+                const videoElement = document.getElementById('video-' + tipo);
+                videoElement.srcObject = cameraStream;
+                await videoElement.play();
+            try {
+                // Verificar se há vídeo rodando
+                if (!video.srcObject && !cameraStream) {
+                    // Modo teste - criar imagem de teste
+                    console.log('Modo teste: criando imagem simulada...');
+                    canvas.width = 640;
+                    canvas.height = 480;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Desenhar fundo branco
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Adicionar texto de teste com CPF
+                    ctx.fillStyle = '#000000';
+                    ctx.font = '20px Arial';
+                    ctx.fillText('DOCUMENTO DE TESTE', 200, 100);
+                    ctx.fillText('CPF: 200.044.604-30', 200, 150);
+                    ctx.fillText('Nome: TESTE SISTEMA', 200, 200);
+                    ctx.fillText('Data Nasc: 01/01/1990', 200, 250);
+                } else {
+                    // Modo normal - capturar da câmera
+                    canvas.width = video.videoWidth || 640;
+                    canvas.height = video.videoHeight || 480;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                }
+                
+                const imagemBase64 = canvas.toDataURL('image/jpeg', 0.95);
+                img.src = imagemBase64;
+                
+                video.classList.add('hidden');
+                preview.classList.remove('hidden');
+                document.getElementById('btn-capturar-doc').classList.add('hidden');
+                document.getElementById('btn-confirmar-doc').classList.remove('hidden');
+                
+                dadosDocumento = { imagem: imagemBase64 };
+                console.log('Documento capturado!');
+            } catch (err) {
+                console.error('Erro ao capturar documento:', err);
+                alert('Erro ao capturar documento: ' + err.message);
+            }sada por outro aplicativo.';
+                } else {
+                    mensagem += err.message;
+                }
+                
+                if (confirm(mensagem + '\n\nDeseja prosseguir sem câmera? (modo teste)')) {
+                    // Modo teste sem câmera
+                    console.log('Modo teste ativado');
+                } else {
+                    voltarInicio();
+                }
+            }
+        }
+
+        function pararCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+        }
+
+        // FLUXO 2: Capturar Documento
+        async function capturarDocumento() {
+            const video = document.getElementById('video-documento');
+            const canvas = document.getElementById('canvas-documento');
+            const preview = document.getElementById('preview-documento');
+            const img = document.getElementById('img-documento');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const imagemBase64 = canvas.toDataURL('image/jpeg', 0.95);
+            img.src = imagemBase64;
+            
+            video.classList.add('hidden');
+            preview.classList.remove('hidden');
+            document.getElementById('btn-capturar-doc').classList.add('hidden');
+            document.getElementById('btn-confirmar-doc').classList.remove('hidden');
+            
+            dadosDocumento = { imagem: imagemBase64 };
+        }
+DEBUG: Mostrar texto capturado
+                document.getElementById('texto-ocr').textContent = textoOCR;
+                document.getElementById('debug-ocr').classList.remove('hidden');
+                
+                // Extrair CPF
+                const cpfMatch = textoOCR.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+                const cpf = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : null;
+                
+                if (cpf) {
+                    document.getElementById('cpf-valor').textContent = formatarCPF(cpf);
+                    document.getElementById('cpf-extraido').classList.remove('hidden');
+                }
+            document.getElementById('ocr-status').classList.remove('hidden');
+            
+            try {
+                // OCR com Tesseract
+                const canvas = document.getElementById('canvas-documento');
+                const result = await Tesseract.recognize(canvas, 'por', {
+                    logger: m => console.log(m)
+                });
+                
+                const textoOCR = result.data.text;
+                console.log('OCR:', textoOCR);
+                
+                // Extrair CPF
+                const cpfMatch = textoOCR.match(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/);
+                const cpf = cpfMatch ? cpfMatch[0].replace(/\D/g, '') : null;
+                
+                if (!cpf) {
+                    hideLoading();
+                    alert('CPF não encontrado no documento. Por favor, tente novamente.');
+                    voltarDocumento();
+                    return;
+                }
+                
+                dadosDocumento.cpf = cpf;
+                
+                // Buscar cliente no SQL Server
+                const response = await fetch(`${API_URL}/totem/processar-documento`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        dados_ocr: { cpf },
+                        imagem_base64: dadosDocumento.imagem
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.clienteEncontrado) {
+                    dadosCliente = data.cliente;
+                    mostrarConfirmacao();
+                } else {
+                    alert('Cliente não encontrado no sistema. Por favor, dirija-se ao balcão de atendimento.');
+                    voltarInicio();
+                }
+                
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao processar documento: ' + err.message);
+                voltarDocumento();
+            } finally {
+                hideLoading();
+                document.getElementById('ocr-status').classList.add('hidden');
+            }
+        }
+
+        // FLUXO 3: Mostrar Confirmação
+        function mostrarConfirmacao() {
+            const container = document.getElementById('dados-cliente');
+            container.innerHTML = `
+                <div class="text-lg"><span class="font-bold">Nome:</span> ${dadosCliente.nome || 'N/A'}</div>
+                <div class="text-lg"><span class="font-bold">CPF:</span> ${formatarCPF(dadosCliente.cpf || '')}</div>
+                <div class="text-lg"><span class="font-bold">Data Nascimento:</span> ${dadosCliente.data_nascimento || 'N/A'}</div>
+                <div class="text-lg"><span class="font-bold">Telefone:</span> ${dadosCliente.celular || dadosCliente.telefone || 'N/A'}</div>
+                <div class="text-lg"><span class="font-bold">Endereço:</span> ${dadosCliente.endereco || 'N/A'}</div>
+            `;
+            pararCamera();
+            mostrarTela('confirmacao');
+        }
+
+        function formatarCPF(cpf) {
+            return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        }
+
+        async function confirmarCliente() {
+            mostrarTela('convenio');
+        }
+
+        // FLUXO 4: Selecionar Convênio
+        async function selecionarConvenio(tipo) {
+            convenioSelecionado = tipo;
+            mostrarTela('carteirinha');
+            await iniciarCamera('carteirinha');
+        }
+
+        // FLUXO 5: Capturar Carteirinha
+        async function capturarCarteirinha() {
+            const video = document.getElementById('video-carteirinha');
+            const canvas = document.getElementById('canvas-carteirinha');
+            const preview = document.getElementById('preview-carteirinha');
+            const img = document.getElementById('img-carteirinha');
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            const imagemBase64 = canvas.toDataURL('image/jpeg', 0.95);
+            img.src = imagemBase64;
+            
+            video.classList.add('hidden');
+            preview.classList.remove('hidden');
+            document.getElementById('btn-capturar-cart').classList.add('hidden');
+            document.getElementById('btn-finalizar').classList.remove('hidden');
+            
+            dadosCarteirinha = { imagem: imagemBase64 };
+        }
+
+        function pularCarteirinha() {
+            dadosCarteirinha = null;
+            finalizarAtendimento();
+        }
+
+        // FLUXO 6: Finalizar
+        async function finalizarAtendimento() {
+            showLoading('Finalizando atendimento...');
+            
+            try {
+                const response = await fetch(`${API_URL}/totem/salvar-atendimento`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        paciente: {
+                            codigo_cliente: dadosCliente.codigo_cliente,
+                            cpf: dadosCliente.cpf,
+                            nome_completo: dadosCliente.nome,
+                            data_nascimento: dadosCliente.data_nascimento,
+                            telefone: dadosCliente.celular || dadosCliente.telefone,
+                            email: dadosCliente.email,
+                            endereco: dadosCliente.endereco
+                        },
+                        convenio: convenioSelecionado,
+                        imagem_documento: dadosDocumento.imagem,
+                        imagem_carteirinha: dadosCarteirinha?.imagem,
+                        cliente_confirmado: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.protocolo) {
+                    pararCamera();
+                    document.getElementById('protocolo').textContent = data.protocolo;
+                    mostrarTela('sucesso');
+                    
+                    // Auto-reiniciar após 30 segundos
+                    setTimeout(voltarInicio, 30000);
+                } else {
+                    throw new Error('Erro ao salvar atendimento');
+                }
+                
+            } catch (err) {
+                console.error('Erro:', err);
+                alert('Erro ao finalizar atendimento: ' + err.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Navegação
+        function voltarInicio() {
+            pararCamera();
+            dadosCliente = null;
+            dadosDocumento = null;
+            dadosCarteirinha = null;
+            convenioSelecionado = null;
+            
+            // Reset UI
+            document.getElementById('video-documento').classList.remove('hidden');
+            document.getElementById('preview-documento').classList.add('hidden');
+            document.getElementById('btn-capturar-doc').classList.remove('hidden');
+            document.getElementById('btn-confirmar-doc').classList.add('hidden');
+            
+            document.getElementById('video-carteirinha').classList.remove('hidden');
+            document.getElementById('preview-carteirinha').classList.add('hidden');
+            document.getElementById('btn-capturar-cart').classList.remove('hidden');
+            document.getElementById('btn-finalizar').classList.add('hidden');
+            document.getElementById('debug-ocr').classList.add('hidden');
+            document.getElementById('cpf-extraido').classList.add('hidden');
+            
+            mostrarTela('welcome');
+        }
+
+        function voltarDocumento() {
+            document.getElementById('video-documento').classList.remove('hidden');
+            document.getElementById('preview-documento').classList.add('hidden');
+            document.getElementById('btn-capturar-doc').classList.remove('hidden');
+            document.getElementById('btn-confirmar-doc').classList.add('hidden');
+            mostrarTela('documento');
+        }
+    </script>
+
+</body>
+</html>

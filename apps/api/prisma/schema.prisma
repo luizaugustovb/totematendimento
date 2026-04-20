@@ -1,0 +1,655 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==============================================
+// USUÁRIOS ADMINISTRATIVOS
+// ==============================================
+
+model UsuarioAdmin {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senhaHash String   @map("senha_hash")
+  perfil    PerfilAdmin @default(ADMIN)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  logsSistema             LogSistema[]
+  pendenciasResolvidasPor PendenciaAprendizado[] @relation("ResolvidoPor")
+  sinonimosEnsinou        SinonimoExame[]
+  
+  @@map("usuarios_admin")
+}
+
+enum PerfilAdmin {
+  ADMIN
+  SUPERVISOR
+  RECEPCAO
+  CONFIGURACAO
+}
+
+// ==============================================
+// UNIDADES
+// ==============================================
+
+model Unidade {
+  id        String   @id @default(uuid())
+  nome      String
+  codigo    String   @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimentos Atendimento[]
+  
+  @@map("unidades")
+}
+
+// ==============================================
+// CONVÊNIOS
+// ==============================================
+
+model Convenio {
+  id               String  @id @default(uuid())
+  nome             String
+  codigo           String  @unique
+  exigeCarteirinha Boolean @default(false) @map("exige_carteirinha")
+  ativo            Boolean @default(true)
+  configJson       Json?   @map("config_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimentos      Atendimento[]
+  sinonimosMedico   SinonimoExame[]
+  execucoesPython   ExecucaoPython[]
+  
+  @@map("convenios")
+}
+
+// ==============================================
+// MÉDICOS
+// ==============================================
+
+model Medico {
+  id                  String   @id @default(uuid())
+  codMedicoLegado     Int?     @unique @map("cod_medico_legado") // Código do SQL Server
+  nome                String
+  crm                 String
+  ufCrm               String   @map("uf_crm")
+  conselho            String?  // CRM, COREN, etc
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimentos     Atendimento[]
+  sinonimosMedico  SinonimoExame[]
+  
+  @@unique([crm, ufCrm])
+  @@map("medicos")
+}
+
+// ==============================================
+// PACIENTES
+// ==============================================
+
+model Paciente {
+  id              String    @id @default(uuid())
+  nomeCompleto    String    @map("nome_completo")
+  cpf             String?   @unique
+  dataNascimento  DateTime? @map("data_nascimento")
+  rg              String?
+  cnh             String?
+  nomeMae         String?   @map("nome_mae")
+  telefone        String?
+  email           String?
+  endereco        String?
+  ativo           Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimentos Atendimento[]
+  
+  @@map("pacientes")
+}
+
+// ==============================================
+// ATENDIMENTOS
+// ==============================================
+
+model Atendimento {
+  id                     String            @id @default(uuid())
+  protocolo              String            @unique
+  pacienteId             String            @map("paciente_id")
+  convenioId             String            @map("convenio_id")
+  medicoId               String?           @map("medico_id")
+  unidadeId              String?           @map("unidade_id")
+  status                 StatusAtendimento @default(AGUARDANDO_COLETA)
+  origem                 OrigemAtendimento @default(TOTEM)
+  telefoneConfirmado     String?           @map("telefone_confirmado")
+  observacoes            String?
+  dadosCarteirinhaJson   Json?             @map("dados_carteirinha_json")
+  clienteConfirmado      Boolean           @default(false) @map("cliente_confirmado")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  paciente             Paciente               @relation(fields: [pacienteId], references: [id])
+  convenio             Convenio               @relation(fields: [convenioId], references: [id])
+  medico               Medico?                @relation(fields: [medicoId], references: [id])
+  unidade              Unidade?               @relation(fields: [unidadeId], references: [id])
+  documentosCapturados DocumentoCapturado[]
+  carteirinhasConvenio CarteirinhaConvenio[]
+  atendimentoExames    AtendimentoExame[]
+  execucoesPython      ExecucaoPython[]
+  mensagensViicio      MensagemViicio[]
+  
+  @@map("atendimentos")
+}
+
+enum StatusAtendimento {
+  AGUARDANDO_COLETA
+  EM_ANDAMENTO
+  PROCESSANDO
+  FINALIZADO
+  CANCELADO
+  PENDENTE_REVISAO
+}
+
+enum OrigemAtendimento {
+  TOTEM
+  RECEPCAO
+}
+
+// ==============================================
+// DOCUMENTOS CAPTURADOS
+// ==============================================
+
+model DocumentoCapturado {
+  id             String              @id @default(uuid())
+  atendimentoId  String              @map("atendimento_id")
+  tipo           String              // Tipo livre: DOCUMENTO_IDENTIFICACAO, CARTEIRA_CONVENIO, PEDIDO_EXAME, etc
+  nomeArquivo    String?             @map("nome_arquivo")
+  caminhoArquivo String              @map("caminho_arquivo")
+  tamanhoBytes   Int?                @map("tamanho_bytes")
+  textoOcr       String?             @map("texto_ocr")
+  metadadosJson  Json?               @map("metadados_json")
+  scoreConfianca Float?              @map("score_confianca")
+  providerOcr    String?             @map("provider_ocr")
+  status         StatusProcessamento @default(PENDING)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimento Atendimento @relation(fields: [atendimentoId], references: [id], onDelete: Cascade)
+  
+  @@map("documentos_capturados")
+}
+
+enum StatusProcessamento {
+  PENDING
+  PROCESSING
+  COMPLETED
+  ERROR
+  MANUAL_REVIEW
+}
+
+// ==============================================
+// CARTEIRINHAS DE CONVÊNIO
+// ==============================================
+
+model CarteirinhaConvenio {
+  id               String   @id @default(uuid())
+  atendimentoId    String   @map("atendimento_id")
+  numeroCarteira   String   @map("numero_carteira")
+  nomeBeneficiario String   @map("nome_beneficiario")
+  validade         DateTime?
+  plano            String?
+  jsonExtraido     Json?    @map("json_extraido")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimento Atendimento @relation(fields: [atendimentoId], references: [id], onDelete: Cascade)
+  
+  @@map("carteirinhas_convenio")
+}
+
+// ==============================================
+// EXAMES
+// ==============================================
+
+model Exame {
+  id              String   @id @default(uuid())
+  codExameLegado  Int?     @unique @map("cod_exame_legado") // Código do SQL Server
+  nomePadrao      String   @map("nome_padrao")
+  codigoInterno   String?  @map("codigo_interno")
+  codigoTuss      String?  @map("codigo_tuss")
+  setor           String?
+  material        String?
+  ativo           Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  sinonimos           SinonimoExame[]
+  atendimentoExames   AtendimentoExame[]
+  
+  @@map("exames")
+}
+
+// ==============================================
+// SINÔNIMOS DE EXAMES
+// ==============================================
+
+model SinonimoExame {
+  id                  String      @id @default(uuid())
+  exameId             String      @map("exame_id")
+  escopo             EscopoSinonimo @default(GLOBAL)
+  medicoId           String?     @map("medico_id")
+  convenioId         String?     @map("convenio_id")
+  descricaoVariacao  String      @map("descricao_variacao")
+  tipoMatch          TipoMatch   @default(EXATO) @map("tipo_match")
+  ativo              Boolean     @default(true)
+  criadoPorUsuarioId String      @map("criado_por_usuario_id")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  exame         Exame        @relation(fields: [exameId], references: [id], onDelete: Cascade)
+  medico        Medico?      @relation(fields: [medicoId], references: [id])
+  convenio      Convenio?    @relation(fields: [convenioId], references: [id])
+  criadoPorUsuario UsuarioAdmin @relation(fields: [criadoPorUsuarioId], references: [id])
+  
+  @@map("sinonimos_exames")
+}
+
+enum EscopoSinonimo {
+  GLOBAL
+  MEDICO
+  CONVENIO
+}
+
+enum TipoMatch {
+  EXATO
+  CONTEM
+  REGEX
+  FUZZY
+  IA
+}
+
+// ==============================================
+// ATENDIMENTO EXAMES
+// ==============================================
+
+model AtendimentoExame {
+  id                   String       @id @default(uuid())
+  atendimentoId        String       @map("atendimento_id")
+  exameId              String?      @map("exame_id")
+  textoOriginal        String       @map("texto_original")
+  textoNormalizado     String?      @map("texto_normalizado")
+  origemMatch          String?      @map("origem_match")
+  scoreConfianca       Float?       @map("score_confianca")
+  statusMatch          StatusMatch  @default(PENDENTE) @map("status_match")
+  revisadoManualmente  Boolean      @default(false) @map("revisado_manualmente")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimento           Atendimento            @relation(fields: [atendimentoId], references: [id], onDelete: Cascade)
+  exame                 Exame?                 @relation(fields: [exameId], references: [id])
+  pendenciasAprendizado PendenciaAprendizado[]
+  
+  @@map("atendimento_exames")
+}
+
+enum StatusMatch {
+  PENDENTE
+  IDENTIFICADO
+  BAIXA_CONFIANCA
+  NAO_IDENTIFICADO
+  REVISAO_NECESSARIA
+  APROVADO
+}
+
+// ==============================================
+// PENDÊNCIAS DE APRENDIZADO
+// ==============================================
+
+model PendenciaAprendizado {
+  id                    String                  @id @default(uuid())
+  atendimentoExameId    String                  @map("atendimento_exame_id")
+  textoOriginal         String                  @map("texto_original")
+  contexto              String?
+  sugestaoIa            String?                 @map("sugestao_ia")
+  scoreConfianca        Float?                  @map("score_confianca")
+  status                StatusPendencia         @default(PENDENTE)
+  resolvidoPor          String?                 @map("resolvido_por")
+  resolvidoEm           DateTime?               @map("resolvido_em")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  updatedAt             DateTime                @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimentoExame   AtendimentoExame @relation(fields: [atendimentoExameId], references: [id], onDelete: Cascade)
+  usuarioResolveu    UsuarioAdmin?    @relation("ResolvidoPor", fields: [resolvidoPor], references: [id])
+  
+  @@map("pendencias_aprendizado")
+}
+
+enum StatusPendencia {
+  PENDENTE
+  APROVADO
+  REJEITADO
+  IGNORADO
+}
+
+// ==============================================
+// LOGS DO SISTEMA
+// ==============================================
+
+model LogSistema {
+  id           String    @id @default(uuid())
+  modulo       String
+  nivel        NivelLog
+  mensagem     String
+  contextoJson Json?     @map("contexto_json")
+  usuarioId    String?   @map("usuario_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  
+  // Relacionamentos
+  usuario UsuarioAdmin? @relation(fields: [usuarioId], references: [id])
+  
+  @@map("logs_sistema")
+}
+
+enum NivelLog {
+  ERROR
+  WARN
+  INFO
+  DEBUG
+}
+
+// ==============================================
+// CONFIGURAÇÕES DO SISTEMA
+// ==============================================
+
+model ConfiguracaoSistema {
+  id        String   @id @default(uuid())
+  chave     String   @unique
+  valorJson Json     @map("valor_json")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  @@map("configuracoes_sistema")
+}
+
+// ==============================================
+// SCRIPTS PYTHON
+// ==============================================
+
+model ScriptPython {
+  id                       String   @id @default(uuid())
+  nome                     String   @unique
+  caminho                  String
+  parametrosPermitidosJson Json     @map("parametros_permitidos_json")
+  timeoutSegundos          Int      @default(60) @map("timeout_segundos")
+  ativo                    Boolean  @default(true)
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  execucoes ExecucaoPython[]
+  
+  @@map("scripts_python")
+}
+
+// ==============================================
+// EXECUÇÕES PYTHON
+// ==============================================
+
+model ExecucaoPython {
+  id                String             @id @default(uuid())
+  atendimentoId     String             @map("atendimento_id")
+  scriptId          String             @map("script_id")
+  convenioId        String?            @map("convenio_id")
+  parametrosJson    Json               @map("parametros_json")
+  status            StatusExecucao     @default(PENDENTE)
+  stdout            String?
+  stderr            String?
+  codigoRetorno     Int?               @map("codigo_retorno")
+  startedAt         DateTime?          @map("started_at")
+  finishedAt        DateTime?          @map("finished_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimento Atendimento  @relation(fields: [atendimentoId], references: [id], onDelete: Cascade)
+  script      ScriptPython @relation(fields: [scriptId], references: [id])
+  convenio    Convenio?    @relation(fields: [convenioId], references: [id])
+  
+  @@map("execucoes_python")
+}
+
+enum StatusExecucao {
+  PENDENTE
+  EXECUTANDO
+  CONCLUIDO
+  ERRO
+  TIMEOUT
+  CANCELADO
+}
+
+// ==============================================
+// MENSAGENS VIICIO
+// ==============================================
+
+model MensagemViicio {
+  id            String           @id @default(uuid())
+  atendimentoId String           @map("atendimento_id")
+  telefone      String
+  template      String
+  payloadJson   Json             @map("payload_json")
+  respostaJson  Json?            @map("resposta_json")
+  status        StatusMensagem   @default(PENDENTE)
+  tentativas    Int              @default(0)
+  ultimaTentativa DateTime?      @map("ultima_tentativa")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  atendimento Atendimento @relation(fields: [atendimentoId], references: [id], onDelete: Cascade)
+  
+  @@map("mensagens_viicio")
+}
+
+enum StatusMensagem {
+  PENDENTE
+  ENVIANDO
+  ENVIADO
+  ERRO
+  FALHOU_DEFINITIVO
+}
+
+// ==============================================
+// USUÁRIOS DO SISTEMA (PACIENTES)
+// ==============================================
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  password    String
+  telefone    String?
+  cpf         String?  @unique
+  ativo       Boolean  @default(true)
+  emailVerificado Boolean @default(false) @map("email_verificado")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  documentos  Documento[]
+  relatorios  Relatorio[]
+  
+  @@map("users")
+}
+
+// ==============================================
+// SISTEMA DE DOCUMENTOS
+// ==============================================
+
+model Documento {
+  id                        String           @id @default(uuid())
+  nome                      String
+  nomeOriginal              String           @map("nome_original")
+  nomeArquivo               String           @map("nome_arquivo")
+  caminho                   String
+  tipoMime                  String           @map("tipo_mime")
+  tamanho                   Int
+  hash                      String
+  tipo                      String?
+  descricao                 String?
+  tags                      String[]
+  metadados                 Json?
+  status                    String           @default("PENDENTE")
+  textoExtraido             String?          @map("texto_extraido")
+  interpretacao             String?
+  thumbnailPath             String?          @map("thumbnail_path")  
+  pdfPath                   String?          @map("pdf_path")
+  compressedPath            String?          @map("compressed_path")
+  virusScanResult           String?          @map("virus_scan_result")
+  categoria                 String?
+  confidenciaClassificacao  Float?           @map("confianca_classificacao")
+  usuarioId                 String           @map("usuario_id")
+  processedAt               DateTime?        @map("processed_at")
+  createdAt                 DateTime         @default(now()) @map("created_at")
+  updatedAt                 DateTime         @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  usuario   User @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  
+  @@map("documentos")
+}
+
+// ==============================================
+// HISTÓRICO DE JOBS
+// ==============================================
+
+model JobHistory {
+  id          String   @id @default(uuid())
+  jobId       String   @map("job_id")
+  queueName   String   @map("queue_name")
+  jobName     String   @map("job_name")
+  jobData     String   @map("job_data")
+  result      String?
+  error       String?
+  duration    Int?
+  success     Boolean
+  processedAt DateTime @map("processed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@map("job_history")
+}
+
+// ==============================================
+// SINCRONIZAÇÃO COM SQL SERVER LEGADO
+// ==============================================
+
+model SincronizacaoLegado {
+  id                String   @id @default(uuid())
+  tabela            String   // "tipo_ex" ou "medico"
+  ultimoCodigoSync  Int      @map("ultimo_codigo_sync") // Último cod_exame ou crm_medico sincronizado
+  totalRegistros    Int      @default(0) @map("total_registros")
+  ultimaSincronizacao DateTime @map("ultima_sincronizacao")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  
+  @@unique([tabela])
+  @@map("sincronizacoes_legado")
+}
+
+// ==============================================
+// LOGS DE AUDITORIA
+// ==============================================
+
+model LogAuditoria {
+  id        String   @id @default(uuid())
+  acao      String   // ADICIONAR_SINONIMO, REMOVER_SINONIMO, SINCRONIZAR, BUSCAR_EXAME, etc
+  entidade  String?  // Nome do exame, médico, etc
+  detalhes  String?  @db.Text // Informações adicionais
+  usuario   String?  // ID ou nome do usuário que executou a ação
+  ip        String?  // IP do usuário
+  userAgent String?  @map("user_agent") // User agent do browser
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@index([acao])
+  @@index([createdAt])
+  @@map("logs_auditoria")
+}
+
+// ==============================================
+// LOGS DO SISTEMA
+// ==============================================
+
+model Log {
+  id        String   @id @default(uuid())
+  level     String
+  message   String
+  context   String?
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  @@map("logs")
+}
+
+// ==============================================
+// RELATÓRIOS
+// ==============================================
+
+model Relatorio {
+  id          String    @id @default(uuid())
+  tipo        String
+  titulo      String
+  conteudo    String
+  status      String    @default("PENDENTE")
+  pdfPath     String?   @map("pdf_path")
+  excelPath   String?   @map("excel_path")
+  usuarioId   String?   @map("usuario_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  // Relacionamentos
+  usuario     User?     @relation(fields: [usuarioId], references: [id])
+  
+  @@map("relatorios")
+}
+
+// ==============================================
+// LOGS DE EMAIL
+// ==============================================
+
+model EmailLog {
+  id           String   @id @default(uuid())
+  destinatario String
+  assunto      String
+  tipo         String
+  status       String
+  messageId    String?  @map("message_id")
+  attachments  String?
+  prioridade   String?
+  usuarioId    String?  @map("usuario_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  @@map("email_logs")
+}
