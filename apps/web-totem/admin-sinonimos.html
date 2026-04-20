@@ -468,7 +468,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    examesCompleto = examesCompleto.filter(ex => ex.cod_exame !== codExame);
+                    examesCompleto = examesCompleto.filter(ex => String(ex.cod_exame).trim() !== String(codExame).trim());
                     document.getElementById('badge-exames').textContent = examesCompleto.length;
                     filtrarExames();
                     await registrarLog('EXCLUIR_EXAME', `Cód: ${codExame}`, nomeExame);
@@ -912,7 +912,7 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    medicosCompleto = medicosCompleto.filter(m => m.crm_medico !== crm);
+                    medicosCompleto = medicosCompleto.filter(m => String(m.crm_medico).trim() !== String(crm).trim());
                     document.getElementById('badge-medicos').textContent = medicosCompleto.length;
                     filtrarMedicos();
                     await registrarLog('EXCLUIR_MEDICO', `CRM: ${crm}`, nome);

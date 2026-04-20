@@ -74,8 +74,8 @@ function carregarExclusoes() {
   try {
     if (fs.existsSync(EXCLUSOES_FILE)) {
       const data = JSON.parse(fs.readFileSync(EXCLUSOES_FILE, 'utf8'));
-      examesExcluidos = new Set((data.exames || []).map(String));
-      medicosExcluidos = new Set((data.medicos || []).map(String));
+      examesExcluidos = new Set((data.exames || []).map(s => String(s).trim()));
+      medicosExcluidos = new Set((data.medicos || []).map(s => String(s).trim()));
       console.log(`📋 Exclusões carregadas: ${examesExcluidos.size} exames, ${medicosExcluidos.size} médicos`);
     }
   } catch (e) {
@@ -551,10 +551,10 @@ const server = http.createServer(async (req, res) => {
 
   // Excluir Exame (remove do cache e impede reimportação)
   if (req.url.match(/^\/api\/admin\/exames\/(.+)$/) && req.method === 'DELETE') {
-    const codExame = req.url.match(/^\/api\/admin\/exames\/(.+)$/)[1];
+    const codExame = decodeURIComponent(req.url.match(/^\/api\/admin\/exames\/(.+)$/)[1]).trim();
     const antes = examesCache.length;
-    examesCache = examesCache.filter(ex => String(ex.cod_exame) !== String(codExame));
-    examesExcluidos.add(String(codExame));
+    examesCache = examesCache.filter(ex => String(ex.cod_exame || '').trim() !== codExame);
+    examesExcluidos.add(codExame);
     salvarExclusoes();
     console.log(`🗑️  Exame excluído permanentemente: ${codExame} (cache: ${antes} → ${examesCache.length}, excluídos: ${examesExcluidos.size})`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -612,10 +612,10 @@ const server = http.createServer(async (req, res) => {
 
   // Excluir Médico (remove do cache e impede reimportação)
   if (req.url.match(/^\/api\/admin\/medicos\/(.+)$/) && req.method === 'DELETE') {
-    const medicoId = req.url.match(/^\/api\/admin\/medicos\/(.+)$/)[1];
+    const medicoId = decodeURIComponent(req.url.match(/^\/api\/admin\/medicos\/(.+)$/)[1]).trim();
     const antes = medicosCache.length;
-    medicosCache = medicosCache.filter(m => String(m.crm_medico) !== String(medicoId));
-    medicosExcluidos.add(String(medicoId));
+    medicosCache = medicosCache.filter(m => String(m.crm_medico || '').trim() !== medicoId);
+    medicosExcluidos.add(medicoId);
     salvarExclusoes();
     console.log(`🗑️  Médico excluído permanentemente: CRM ${medicoId} (cache: ${antes} → ${medicosCache.length}, excluídos: ${medicosExcluidos.size})`);
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1127,13 +1127,15 @@ async function sincronizarExamesSQLServer() {
         .query(query);
       
       const novosExamesRaw = result.recordset || [];
-      const novosExames = novosExamesRaw.filter(ex => !examesExcluidos.has(String(ex.cod_exame)));
+      const novosExames = novosExamesRaw.filter(ex => !examesExcluidos.has(String(ex.cod_exame || '').trim()));
       
       if (novosExames.length > 0) {
-        // Adicionar novos exames ao cache (excluídos já filtrados)
-        examesCache = [...examesCache, ...novosExames];
+        // Adicionar novos exames ao cache, re-aplicar filtro de exclusões no cache completo
+        examesCache = [...examesCache, ...novosExames].filter(ex => !examesExcluidos.has(String(ex.cod_exame || '').trim()));
         console.log(`📥 ${novosExames.length} NOVOS exames adicionados (total: ${examesCache.length})`);
       } else {
+        // Re-aplicar filtro de exclusões como segurança
+        examesCache = examesCache.filter(ex => !examesExcluidos.has(String(ex.cod_exame || '').trim()));
         console.log(`✅ Nenhum exame novo encontrado`);
       }
       
@@ -1152,7 +1154,7 @@ async function sincronizarExamesSQLServer() {
       
       // Substituir cache completo, filtrando excluídos
       const todos = result.recordset || [];
-      examesCache = todos.filter(ex => !examesExcluidos.has(String(ex.cod_exame)));
+      examesCache = todos.filter(ex => !examesExcluidos.has(String(ex.cod_exame || '').trim()));
       const filtrados = todos.length - examesCache.length;
       
       console.log(`📥 ${todos.length} exames no SQL Server → ${examesCache.length} carregados (${filtrados} excluídos ignorados)`);
@@ -1228,13 +1230,15 @@ async function sincronizarMedicosSQLServer() {
         .query(query);
       
       const novosMedicosRaw = result.recordset || [];
-      const novosMedicos = novosMedicosRaw.filter(m => !medicosExcluidos.has(String(m.crm_medico)));
+      const novosMedicos = novosMedicosRaw.filter(m => !medicosExcluidos.has(String(m.crm_medico || '').trim()));
       
       if (novosMedicos.length > 0) {
-        // Adicionar novos médicos ao cache (excluídos já filtrados)
-        medicosCache = [...medicosCache, ...novosMedicos];
+        // Adicionar novos médicos ao cache, re-aplicar filtro de exclusões no cache completo
+        medicosCache = [...medicosCache, ...novosMedicos].filter(m => !medicosExcluidos.has(String(m.crm_medico || '').trim()));
         console.log(`📥 ${novosMedicos.length} NOVOS médicos adicionados (total: ${medicosCache.length})`);
       } else {
+        // Re-aplicar filtro de exclusões como segurança
+        medicosCache = medicosCache.filter(m => !medicosExcluidos.has(String(m.crm_medico || '').trim()));
         console.log(`✅ Nenhum médico novo encontrado`);
       }
       
@@ -1258,7 +1262,7 @@ async function sincronizarMedicosSQLServer() {
       
       // Substituir cache completo, filtrando excluídos
       const todos = result.recordset || [];
-      medicosCache = todos.filter(m => !medicosExcluidos.has(String(m.crm_medico)));
+      medicosCache = todos.filter(m => !medicosExcluidos.has(String(m.crm_medico || '').trim()));
       const filtrados = todos.length - medicosCache.length;
       
       console.log(`📥 ${todos.length} médicos no SQL Server → ${medicosCache.length} carregados (${filtrados} excluídos ignorados)`);
