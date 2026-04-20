@@ -35,10 +35,45 @@ let medicosCache = []; // Médicos sincronizados do SQL Server
 let sinonimos = []; // Sinônimos criados pelo admin
 let logsAuditoria = []; // Logs de ações do admin
 
+// ============================================
+// LISTAS DE EXCLUSÃO (persistidas em arquivo)
+// ============================================
+const EXCLUSOES_FILE = path.join(__dirname, 'exclusoes.json');
+
+let examesExcluidos = new Set(); // cod_exame excluídos
+let medicosExcluidos = new Set(); // crm_medico excluídos
+
+function carregarExclusoes() {
+  try {
+    if (fs.existsSync(EXCLUSOES_FILE)) {
+      const data = JSON.parse(fs.readFileSync(EXCLUSOES_FILE, 'utf8'));
+      examesExcluidos = new Set((data.exames || []).map(String));
+      medicosExcluidos = new Set((data.medicos || []).map(String));
+      console.log(`📋 Exclusões carregadas: ${examesExcluidos.size} exames, ${medicosExcluidos.size} médicos`);
+    }
+  } catch (e) {
+    console.warn('⚠️  Não foi possível carregar exclusoes.json:', e.message);
+  }
+}
+
+function salvarExclusoes() {
+  try {
+    fs.writeFileSync(EXCLUSOES_FILE, JSON.stringify({
+      exames: [...examesExcluidos],
+      medicos: [...medicosExcluidos]
+    }, null, 2));
+  } catch (e) {
+    console.error('❌ Erro ao salvar exclusoes.json:', e.message);
+  }
+}
+
+// Carregar exclusões ao iniciar
+carregarExclusoes();
+
 const server = http.createServer(async (req, res) => {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
@@ -320,7 +355,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url.match(/^\/api\/totem\/sinonimos\/(.+)$/) && req.method === 'GET') {
     const exameId = req.url.match(/^\/api\/totem\/sinonimos\/(.+)$/)[1];
     
-    const sinonimoDoExame = sinonimos.filter(s => s.exameId === exameId);
+    const sinonimoDoExame = sinonimos.filter(s => String(s.exameId) === String(exameId));
     
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ 
@@ -336,9 +371,10 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {
-        const { exameId, sinonimo } = JSON.parse(body);
+        const { exameId, sinonimo, descricaoVariacao } = JSON.parse(body);
+        const textoSinonimo = sinonimo || descricaoVariacao;
         
-        if (!exameId || !sinonimo) {
+        if (!exameId || !textoSinonimo) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, mensagem: 'Dados incompletos' }));
           return;
@@ -346,7 +382,7 @@ const server = http.createServer(async (req, res) => {
         
         // Verificar se já existe
         const existe = sinonimos.find(s => 
-          s.exameId === exameId && s.sinonimo.toLowerCase() === sinonimo.toLowerCase()
+          String(s.exameId) === String(exameId) && s.sinonimo.toLowerCase() === textoSinonimo.toLowerCase()
         );
         
         if (existe) {
@@ -357,15 +393,18 @@ const server = http.createServer(async (req, res) => {
         
         const novoSinonimo = {
           id: Date.now(),
-          exameId,
-          sinonimo: sinonimo.trim(),
+          exameId: String(exameId),
+          sinonimo: textoSinonimo.trim(),
+          descricaoVariacao: textoSinonimo.trim(),
+          escopo: 'GLOBAL',
           ativo: true,
-          criadoEm: new Date().toISOString()
+          criadoEm: new Date().toISOString(),
+          createdAt: new Date().toISOString()
         };
         
         sinonimos.push(novoSinonimo);
         
-        console.log(`✅ Sinônimo adicionado: "${sinonimo}" para exame ${exameId}`);
+        console.log(`✅ Sinônimo adicionado: "${textoSinonimo}" para exame ${exameId}`);
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ 
@@ -416,6 +455,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Listar Exames (para admin)
+  if (req.url === '/api/admin/exames' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      success: true,
+      exames: examesCache,
+      total: examesCache.length
+    }));
+    return;
+  }
+
+  // Excluir Exame (remove do cache e impede reimportação)
+  if (req.url.match(/^\/api\/admin\/exames\/(.+)$/) && req.method === 'DELETE') {
+    const codExame = req.url.match(/^\/api\/admin\/exames\/(.+)$/)[1];
+    const antes = examesCache.length;
+    examesCache = examesCache.filter(ex => String(ex.cod_exame) !== String(codExame));
+    examesExcluidos.add(String(codExame));
+    salvarExclusoes();
+    console.log(`🗑️  Exame excluído permanentemente: ${codExame} (cache: ${antes} → ${examesCache.length}, excluídos: ${examesExcluidos.size})`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, mensagem: 'Exame excluído e não será reimportado' }));
+    return;
+  }
+
   // Listar Médicos (para admin)
   if (req.url === '/api/admin/medicos' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -461,6 +524,19 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, erro: erro.message }));
       }
     });
+    return;
+  }
+
+  // Excluir Médico (remove do cache e impede reimportação)
+  if (req.url.match(/^\/api\/admin\/medicos\/(.+)$/) && req.method === 'DELETE') {
+    const medicoId = req.url.match(/^\/api\/admin\/medicos\/(.+)$/)[1];
+    const antes = medicosCache.length;
+    medicosCache = medicosCache.filter(m => String(m.crm_medico) !== String(medicoId));
+    medicosExcluidos.add(String(medicoId));
+    salvarExclusoes();
+    console.log(`🗑️  Médico excluído permanentemente: CRM ${medicoId} (cache: ${antes} → ${medicosCache.length}, excluídos: ${medicosExcluidos.size})`);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, mensagem: 'Médico excluído e não será reimportado' }));
     return;
   }
 
@@ -967,10 +1043,11 @@ async function sincronizarExamesSQLServer() {
         .input('ultimoCodigo', sql.VarChar, ultimoCodigo)
         .query(query);
       
-      const novosExames = result.recordset || [];
+      const novosExamesRaw = result.recordset || [];
+      const novosExames = novosExamesRaw.filter(ex => !examesExcluidos.has(String(ex.cod_exame)));
       
       if (novosExames.length > 0) {
-        // Adicionar novos exames ao cache
+        // Adicionar novos exames ao cache (excluídos já filtrados)
         examesCache = [...examesCache, ...novosExames];
         console.log(`📥 ${novosExames.length} NOVOS exames adicionados (total: ${examesCache.length})`);
       } else {
@@ -990,10 +1067,12 @@ async function sincronizarExamesSQLServer() {
       
       const result = await pool.request().query(query);
       
-      // Substituir cache completo
-      examesCache = result.recordset || [];
+      // Substituir cache completo, filtrando excluídos
+      const todos = result.recordset || [];
+      examesCache = todos.filter(ex => !examesExcluidos.has(String(ex.cod_exame)));
+      const filtrados = todos.length - examesCache.length;
       
-      console.log(`📥 ${examesCache.length} exames encontrados no SQL Server (primeira sincronização)`);
+      console.log(`📥 ${todos.length} exames no SQL Server → ${examesCache.length} carregados (${filtrados} excluídos ignorados)`);
       
       return examesCache;
     }
@@ -1065,10 +1144,11 @@ async function sincronizarMedicosSQLServer() {
         .input('ultimoCRM', sql.VarChar, ultimoCRM)
         .query(query);
       
-      const novosMedicos = result.recordset || [];
+      const novosMedicosRaw = result.recordset || [];
+      const novosMedicos = novosMedicosRaw.filter(m => !medicosExcluidos.has(String(m.crm_medico)));
       
       if (novosMedicos.length > 0) {
-        // Adicionar novos médicos ao cache
+        // Adicionar novos médicos ao cache (excluídos já filtrados)
         medicosCache = [...medicosCache, ...novosMedicos];
         console.log(`📥 ${novosMedicos.length} NOVOS médicos adicionados (total: ${medicosCache.length})`);
       } else {
@@ -1093,10 +1173,12 @@ async function sincronizarMedicosSQLServer() {
       
       const result = await pool.request().query(query);
       
-      // Substituir cache completo
-      medicosCache = result.recordset || [];
+      // Substituir cache completo, filtrando excluídos
+      const todos = result.recordset || [];
+      medicosCache = todos.filter(m => !medicosExcluidos.has(String(m.crm_medico)));
+      const filtrados = todos.length - medicosCache.length;
       
-      console.log(`📥 ${medicosCache.length} médicos encontrados no SQL Server (primeira sincronização)`);
+      console.log(`📥 ${todos.length} médicos no SQL Server → ${medicosCache.length} carregados (${filtrados} excluídos ignorados)`);
       
       return medicosCache;
     }
@@ -1113,7 +1195,7 @@ async function sincronizarMedicosSQLServer() {
 }
 
 // Iniciar servidor
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log('');
   console.log('🚀 ========================================');
   console.log('   Servidor OCR Test rodando!');
@@ -1137,4 +1219,30 @@ server.listen(PORT, () => {
   console.log('');
   console.log('⏹️  Para parar: Ctrl+C');
   console.log('========================================');
+
+  // ============================================
+  // SINCRONIZAÇÃO AUTOMÁTICA AO INICIAR
+  // ============================================
+  console.log('');
+  console.log('🔄 Iniciando sincronização automática com SQL Server...');
+  try {
+    const exames = await sincronizarExamesSQLServer();
+    statusSincronizacao.exames.totalSincronizados = exames.length;
+    statusSincronizacao.exames.ultimaSincronizacao = new Date().toISOString();
+    if (exames.length > 0) statusSincronizacao.exames.ultimoCodigoSync = exames[exames.length - 1].cod_exame || 0;
+    console.log(`✅ ${examesCache.length} exames carregados`);
+  } catch (e) {
+    console.warn('⚠️  Não foi possível sincronizar exames:', e.message);
+  }
+  try {
+    const medicos = await sincronizarMedicosSQLServer();
+    statusSincronizacao.medicos.totalSincronizados = medicos.length;
+    statusSincronizacao.medicos.ultimaSincronizacao = new Date().toISOString();
+    if (medicos.length > 0) statusSincronizacao.medicos.ultimoCodigoSync = medicos[medicos.length - 1].crm_medico || 0;
+    console.log(`✅ ${medicosCache.length} médicos carregados`);
+  } catch (e) {
+    console.warn('⚠️  Não foi possível sincronizar médicos:', e.message);
+  }
+  console.log('');
+  console.log('🟢 Sistema pronto!');
 });
