@@ -1484,7 +1484,9 @@
             const container = document.getElementById('lista-exames-confirmar');
             const msgVazio = document.getElementById('nenhum-exame-msg');
             
-            const examesSelecionados = examesConfirmados.filter(e => e.selecionado);
+            const examesSelecionados = examesConfirmados
+                .map((item, originalIndex) => ({ ...item, originalIndex }))
+                .filter(e => e.selecionado);
             
             if (examesSelecionados.length === 0) {
                 container.innerHTML = '';
@@ -1494,7 +1496,7 @@
             
             msgVazio.classList.add('hidden');
             
-            container.innerHTML = examesSelecionados.map((item, index) => {
+            container.innerHTML = examesSelecionados.map((item) => {
                 const scoreClass = item.score >= 0.9 ? 'bg-green-100 text-green-800' : 
                                   item.score >= 0.7 ? 'bg-yellow-100 text-yellow-800' : 
                                   'bg-red-100 text-red-800';
@@ -1527,7 +1529,7 @@
                             <span class="px-3 py-1 rounded-full text-xs font-bold ${scoreClass}">
                                 ${Math.round(item.score * 100)}% confiança
                             </span>
-                            <button onclick="removerExame(${index})" 
+                            <button onclick="removerExame(${item.originalIndex})" 
                                     class="text-red-600 hover:text-red-800 p-2">
                                 <i class="fas fa-trash text-xl"></i>
                             </button>
