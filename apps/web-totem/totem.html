@@ -700,70 +700,56 @@
         
         function extrairCPF(texto) {
             console.log('🔍 Buscando CPF no texto...');
-            
-            // Estratégia 1: Procurar padrão "CPF" seguido de números
-            const padraoCPFExplicito = /CPF[:\s\-\.]*([0-9O]{3}[\s\.\-]*[0-9O]{3}[\s\.\-]*[0-9O]{3}[\s\.\-]*[0-9O]{2})/gi;
-            let match = texto.match(padraoCPFExplicito);
-            if (match) {
-                const cpfCandidato = match[0].replace(/[^\dO]/g, '').replace(/O/g, '0');
-                if (cpfCandidato.length === 11) {
-                    console.log('✅ CPF encontrado (estratégia 1):', cpfCandidato);
-                    return cpfCandidato;
+
+            // Validação básica: rejeitar sequências inválidas (todos dígitos iguais)
+            function cpfValido(digits) {
+                if (digits.length !== 11) return false;
+                if (/^(\d)\1{10}$/.test(digits)) return false; // 11111111111, 00000000000...
+                return true;
+            }
+
+            // Estratégia 1: Procurar rótulo "CPF" seguido de números (mais confiável)
+            const linhas = texto.split('\n');
+            for (let i = 0; i < linhas.length; i++) {
+                const linha = linhas[i];
+                if (/\bCPF\b/i.test(linha)) {
+                    // Tentar extrair da mesma linha ou da próxima
+                    const textoJunto = linha + ' ' + (linhas[i + 1] || '');
+                    const m = textoJunto.match(/(\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{2})/);
+                    if (m) {
+                        const digits = m[1].replace(/\D/g, '');
+                        if (cpfValido(digits)) {
+                            console.log('✅ CPF encontrado (estratégia 1 - rótulo CPF):', digits);
+                            return digits;
+                        }
+                    }
                 }
             }
-            
-            // Estratégia 2: Buscar padrão XXX.XXX.XXX-XX ou variações
-            const padraoFormatado = /(\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{3}[\s\.\-]?\d{2})/g;
-            const matches = [...texto.matchAll(padraoFormatado)];
-            
-            for (const m of matches) {
-                const cpfCandidato = m[0].replace(/\D/g, '');
-                if (cpfCandidato.length === 11 && !cpfCandidato.startsWith('0')) {
-                    console.log('✅ CPF encontrado (estratégia 2):', cpfCandidato);
-                    return cpfCandidato;
+
+            // Estratégia 2: Padrão formatado XXX.XXX.XXX-XX (pontos e hífen são forte sinal)
+            const padraoFormatado = /\b(\d{3})[\.\s](\d{3})[\.\s](\d{3})[\-\.\s](\d{2})\b/g;
+            let m2;
+            while ((m2 = padraoFormatado.exec(texto)) !== null) {
+                const digits = m2[1] + m2[2] + m2[3] + m2[4];
+                if (cpfValido(digits)) {
+                    console.log('✅ CPF encontrado (estratégia 2 - formatado):', digits);
+                    return digits;
                 }
             }
-            
-            // Estratégia 3: Extrair todas as sequências de dígitos
-            const numeros = texto.match(/\d+/g);
-            if (numeros) {
-                // Procurar sequência de exatamente 11 dígitos
-                for (const num of numeros) {
-                    if (num.length === 11 && !num.startsWith('0') && !num.startsWith('11111')) {
-                        console.log('✅ CPF encontrado (estratégia 3):', num);
+
+            // Estratégia 3: Sequência de exatamente 11 dígitos consecutivos
+            const matches11 = texto.match(/\b\d{11}\b/g);
+            if (matches11) {
+                for (const num of matches11) {
+                    // Rejeitar anos, datas e números de documentos óbvios
+                    if (/^(19|20)\d{9}$/.test(num)) continue; // parece timestamp
+                    if (cpfValido(num)) {
+                        console.log('✅ CPF encontrado (estratégia 3 - 11 dígitos):', num);
                         return num;
                     }
                 }
-                
-                // Tentar combinar números adjacentes
-                const todosDigitos = numeros.join('');
-                if (todosDigitos.length >= 11) {
-                    // Procurar janela deslizante de 11 dígitos
-                    for (let i = 0; i <= todosDigitos.length - 11; i++) {
-                        const possivel = todosDigitos.substring(i, i + 11);
-                        if (!possivel.startsWith('0') && !possivel.startsWith('11111')) {
-                            console.log('✅ CPF encontrado (estratégia 4):', possivel);
-                            return possivel;
-                        }
-                    }
-                }
             }
-            
-            // Estratégia 5: Buscar em linhas específicas que contenham "CPF"
-            const linhas = texto.split('\n');
-            for (const linha of linhas) {
-                if (linha.toUpperCase().includes('CPF')) {
-                    const digitos = linha.replace(/[^\d]/g, '');
-                    if (digitos.length >= 11) {
-                        const cpf = digitos.substring(0, 11);
-                        if (!cpf.startsWith('0')) {
-                            console.log('✅ CPF encontrado (estratégia 5):', cpf);
-                            return cpf;
-                        }
-                    }
-                }
-            }
-            
+
             console.log('❌ CPF não encontrado em nenhuma estratégia');
             return null;
         }
